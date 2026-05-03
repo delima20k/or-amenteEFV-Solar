@@ -90,7 +90,7 @@ class MaterialLibrary {
       ctx.fillRect(0, 0, w, h);
     });
     tex.repeat.set(6, 5);
-    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.82, metalness: 0.03, side: THREE.FrontSide });
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.82, metalness: 0.03, side: THREE.DoubleSide });
   }
 
   /* Telha para fundo (face interna visível) */
