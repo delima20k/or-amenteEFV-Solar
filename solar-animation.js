@@ -372,11 +372,11 @@ class Walls {
    roofPoint(x,z,offset): ponto 3D na superfície + offset normal
    ───────────────────────────────────────────────────────────────────── */
 class Roof {
-  static slope = 0;
   static roofY(zWorld) {
     const { FH, H, RA, D } = CASA;
     return FH + H + RA * (1 - Math.abs(zWorld) / (D / 2));
   }
+
   static roofPoint(x, z, normalOffset = 0) {
     const { RA, D } = CASA;
     const slope = Math.atan2(RA, D / 2);
@@ -387,35 +387,77 @@ class Roof {
 
   constructor(grp) {
     const { W, D, H, FH, RA, EV } = CASA;
-    Roof.slope = Math.atan2(RA, D / 2);
-    const sLen = Math.hypot(RA, D / 2) + EV;
-    const mat  = MaterialLibrary.telha();
 
-    // Água dianteira (Z < 0) e traseira (Z > 0)
-    for (const sign of [-1, 1]) {
-      const plano = new THREE.Mesh(
-        new THREE.PlaneGeometry(W + EV * 2, sLen, 1, 1),
-        mat.clone()
-      );
-      plano.rotation.x = sign > 0 ? -(Math.PI / 2 - Roof.slope) : (Math.PI / 2 - Roof.slope);
-      const yCenter = FH + H + RA / 2;
-      const zOff    = sign * (sLen / 2 * Math.cos(Roof.slope));
-      plano.position.set(0, yCenter, zOff);
-      plano.castShadow = plano.receiveShadow = true;
-      grp.add(plano);
-    }
+    /* Pontos-chave do telhado */
+    const eY  = FH + H;          // nível do beiral (topo da parede)
+    const rY  = FH + H + RA;     // nível da cumeeira
+    const xL  = -(W / 2 + EV);  // extremo esquerdo (com beiral lateral)
+    const xR  =  (W / 2 + EV);  // extremo direito
+    const eZf = -(D / 2 + EV);  // Z do beiral dianteiro
+    const eZb =  (D / 2 + EV);  // Z do beiral traseiro
 
-    // Cumeeira cilíndrica
+    /* Constrói um painel de telhado com BufferGeometry e normais corretas.
+       Vértices em ordem CCW vista de fora: p0→p1→p2→p3 */
+    const buildPane = (p0, p1, p2, p3) => {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(
+        new Float32Array([
+          p0.x, p0.y, p0.z,
+          p1.x, p1.y, p1.z,
+          p2.x, p2.y, p2.z,
+          p3.x, p3.y, p3.z,
+        ]), 3
+      ));
+      geo.setIndex([0, 1, 2,  0, 2, 3]);
+      /* UV: U = largura (0→1), V = altura do slope (0→1) */
+      geo.setAttribute('uv', new THREE.BufferAttribute(
+        new Float32Array([0, 0,  0, 1,  1, 1,  1, 0]), 2
+      ));
+      geo.computeVertexNormals();
+      return geo;
+    };
+
+    /* ── Água DIANTEIRA (frente, Z < 0)
+       Winding CCW do exterior: bl → tl → tr → br
+       → normal aponta para cima e para frente (−Z) ── */
+    const front = new THREE.Mesh(
+      buildPane(
+        v3(xL, eY, eZf),  // p0 bl — beiral esq. dianteiro
+        v3(xL, rY, 0),    // p1 tl — cumeeira esq.
+        v3(xR, rY, 0),    // p2 tr — cumeeira dir.
+        v3(xR, eY, eZf),  // p3 br — beiral dir. dianteiro
+      ),
+      MaterialLibrary.telha()
+    );
+    front.castShadow = front.receiveShadow = true;
+    grp.add(front);
+
+    /* ── Água TRASEIRA (trás, Z > 0)
+       Winding CCW do exterior: br → tr → tl → bl
+       → normal aponta para cima e para trás (+Z) ── */
+    const back = new THREE.Mesh(
+      buildPane(
+        v3(xR, eY, eZb),  // p0 br — beiral dir. traseiro
+        v3(xR, rY, 0),    // p1 tr — cumeeira dir.
+        v3(xL, rY, 0),    // p2 tl — cumeeira esq.
+        v3(xL, eY, eZb),  // p3 bl — beiral esq. traseiro
+      ),
+      MaterialLibrary.telha()
+    );
+    back.castShadow = back.receiveShadow = true;
+    grp.add(back);
+
+    /* ── Cumeeira cilíndrica ── */
     const ridge = new THREE.Mesh(
       new THREE.CylinderGeometry(0.065, 0.065, W + EV * 2 + 0.1, 8),
       MaterialLibrary.metalEscuro()
     );
     ridge.rotation.z = Math.PI / 2;
-    ridge.position.set(0, FH + H + RA + 0.04, 0);
+    ridge.position.set(0, rY + 0.05, 0);
     ridge.castShadow = true;
     grp.add(ridge);
 
-    // Tabeiras laterais
+    /* ── Tabeiras laterais (cobrem a empena) ── */
     for (const side of [-1, 1]) {
       const tabeira = new THREE.Mesh(
         new THREE.BoxGeometry(0.18, 0.18, D + EV * 2 + 0.1),
@@ -426,15 +468,14 @@ class Roof {
       grp.add(tabeira);
     }
 
-    // Beiral dianteiro e traseiro — régua de acabamento
+    /* ── Beirais dianteiro e traseiro ── */
     for (const sign of [-1, 1]) {
-      const beiralMesh = new THREE.Mesh(
+      const beiral = new THREE.Mesh(
         new THREE.BoxGeometry(W + EV * 2 + 0.1, 0.12, 0.2),
         MaterialLibrary.madeira()
       );
-      const zBH = sign * (D / 2 + EV * 0.85);
-      beiralMesh.position.set(0, FH + H + 0.08, zBH);
-      grp.add(beiralMesh);
+      beiral.position.set(0, FH + H + 0.04, sign * (D / 2 + EV * 0.88));
+      grp.add(beiral);
     }
   }
 }
