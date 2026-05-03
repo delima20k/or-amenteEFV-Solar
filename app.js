@@ -696,12 +696,12 @@ class PwaInstallController {
   }
 
   #dispensar() {
+    localStorage.setItem(PwaInstallController.#DISMISSED_KEY, '1');
     this.#banner.classList.add('pwa-banner--saindo');
-    this.#banner.addEventListener('animationend', () => {
+    setTimeout(() => {
       this.#banner.hidden = true;
       this.#banner.classList.remove('pwa-banner--saindo');
-      localStorage.setItem(PwaInstallController.#DISMISSED_KEY, '1');
-    }, { once: true });
+    }, 420);
   }
 }
 
