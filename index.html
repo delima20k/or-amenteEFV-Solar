@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#FFB800">
+  <meta name="description" content="EFV Solar — Orçamentos Fotovoltaicos">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EFV Solar">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" href="./assets/efv_solar.png">
+  <link rel="apple-touch-icon" href="./assets/efv_solar.png">
+  <link rel="stylesheet" href="./style.css">
+  <title>EFV Solar — Orçamentos</title>
+</head>
+<body>
+
+  <!-- ===== OVERLAY ===== -->
+  <div id="menu-overlay" class="menu-overlay" aria-hidden="true"></div>
+
+  <!-- ===== SIDEBAR ===== -->
+  <aside id="sidebar" class="sidebar" aria-hidden="true" aria-label="Menu de navegação">
+    <div class="sidebar-head">
+      <img src="./assets/efv_solar.png" alt="EFV Solar" class="sidebar-logo">
+      <div class="sidebar-head-text">
+        <span class="sidebar-empresa">EFV SOLAR</span>
+        <span class="sidebar-prop">Lino M. DE AZEVEDO</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav" role="navigation">
+      <button class="sidebar-nav-item sidebar-nav-item--ativo" data-tela="form">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>Início</span>
+      </button>
+      <button class="sidebar-nav-item" data-tela="orcamentos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+        <span>Orçamentos</span>
+      </button>
+      <button class="sidebar-nav-item" data-tela="financas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        <span>Finanças</span>
+      </button>
+      <button class="sidebar-nav-item" data-tela="calculadora">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/></svg>
+        <span>Calculadora</span>
+      </button>
+    </nav>
+    <footer class="sidebar-footer">
+      <a href="https://www.instagram.com/efvsolar_oficia" target="_blank" rel="noopener noreferrer" class="sf-instagram">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+        @efvsolar_oficia
+      </a>
+      <div class="sf-info">
+        <span class="sf-nome">EFV Solar</span>
+        <a href="tel:11972395317" class="sf-phone">(11) 97239-5317</a>
+      </div>
+    </footer>
+  </aside>
+
+  <!-- ===== CABEÇALHO ===== -->
+  <header class="app-header">
+    <img src="./assets/efv_solar.png" alt="EFV Solar" class="header-logo">
+    <div class="header-titles">
+      <h1 class="header-title">EFV SOLAR</h1>
+      <span class="header-subtitle">Orçamentos Fotovoltaicos</span>
+    </div>
+    <button id="btn-menu" class="btn-hamburger" aria-label="Abrir menu" aria-expanded="false" aria-controls="sidebar">
+      <span class="hb-line"></span>
+      <span class="hb-line"></span>
+      <span class="hb-line"></span>
+    </button>
+  </header>
+
+  <!-- ===== TELAS ===== -->
+  <main class="main-content">
+
+    <!-- TELA: FORMULÁRIO -->
+    <section id="tela-form" class="tela tela--ativa">
+    <div class="form-card">
+      <h2 class="form-card-title">Formulário de Orçamento</h2>
+
+      <form id="orcamento-form" novalidate autocomplete="off">
+
+        <!-- DADOS DO CLIENTE -->
+        <fieldset class="form-section">
+          <legend>Dados do Cliente</legend>
+          <div class="fields-wrapper">
+            <div class="form-group full-width">
+              <label for="nome" class="form-label">Nome do Cliente</label>
+              <input type="text" id="nome" name="nome" class="form-input" placeholder="Nome completo do cliente">
+            </div>
+            <div class="form-group full-width">
+              <label for="endereco" class="form-label">Endereço do Cliente</label>
+              <input type="text" id="endereco" name="endereco" class="form-input" placeholder="Endereço completo">
+            </div>
+            <div class="form-group">
+              <label for="contato" class="form-label">Contato do Cliente</label>
+              <input type="text" id="contato" name="contato" class="form-input" placeholder="Telefone ou e-mail">
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- EQUIPAMENTOS -->
+        <fieldset class="form-section">
+          <legend>Equipamentos</legend>
+          <div class="fields-wrapper">
+            <div class="form-group full-width">
+              <label for="inversor" class="form-label">Inversor</label>
+              <input type="text" id="inversor" name="inversor" class="form-input" placeholder="Modelo e potência do inversor">
+            </div>
+            <div class="form-group full-width">
+              <label for="estrutura" class="form-label">Estrutura</label>
+              <input type="text" id="estrutura" name="estrutura" class="form-input" placeholder="Tipo de estrutura de fixação">
+            </div>
+            <div class="form-group">
+              <label for="cabo_preto" class="form-label">Cabo CC Preto</label>
+              <input type="text" id="cabo_preto" name="cabo_preto" class="form-input" placeholder="Ex: 50 metros">
+            </div>
+            <div class="form-group">
+              <label for="cabo_vermelho" class="form-label">Cabo CC Vermelho</label>
+              <input type="text" id="cabo_vermelho" name="cabo_vermelho" class="form-input" placeholder="Ex: 50 metros">
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- ANÁLISE FINANCEIRA -->
+        <fieldset class="form-section">
+          <legend>Análise Financeira</legend>
+          <div class="fields-wrapper">
+            <div class="form-group">
+              <label for="inflacao" class="form-label">Inflação Anual</label>
+              <input type="text" id="inflacao" name="inflacao" class="form-input" placeholder="Ex: 5%">
+            </div>
+            <div class="form-group">
+              <label for="economia" class="form-label">Economia</label>
+              <input type="text" id="economia" name="economia" class="form-input" placeholder="Economia estimada">
+            </div>
+            <div class="form-group">
+              <label for="economia_mensal" class="form-label">Economia Mensal</label>
+              <input type="text" id="economia_mensal" name="economia_mensal" class="form-input" placeholder="Ex: R$ 500,00">
+            </div>
+            <div class="form-group">
+              <label for="economia_anual" class="form-label">Economia Anual</label>
+              <input type="text" id="economia_anual" name="economia_anual" class="form-input" placeholder="Ex: R$ 6.000,00">
+            </div>
+            <div class="form-group">
+              <label for="investimento" class="form-label">Investimento</label>
+              <input type="text" id="investimento" name="investimento" class="form-input" placeholder="Ex: R$ 25.000,00">
+            </div>
+            <div class="form-group">
+              <label for="economia_30" class="form-label">Economia em 30 Anos</label>
+              <input type="text" id="economia_30" name="economia_30" class="form-input" placeholder="Ex: R$ 180.000,00">
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- BOTÕES -->
+        <div class="form-actions">
+          <button type="button" id="btn-gerar-pdf" class="btn-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                 stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <span class="btn-label">Salvar e Gerar PDF</span>
+          </button>
+          <button type="reset" class="btn-secondary">Limpar</button>
+        </div>
+
+      </form>
+    </div>
+    </section>
+
+    <!-- TELA: ORÇAMENTOS -->
+    <section id="tela-orcamentos" class="tela">
+      <div class="screen-header">
+        <h2 class="screen-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+          Histórico de Orçamentos
+        </h2>
+      </div>
+      <div id="lista-orcamentos" class="lista-items"></div>
+    </section>
+
+    <!-- TELA: FINANÇAS -->
+    <section id="tela-financas" class="tela">
+      <div class="screen-header">
+        <h2 class="screen-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Finanças
+        </h2>
+      </div>
+      <div id="lista-financas" class="lista-items"></div>
+      <div class="financas-totais">
+        <div class="total-item">
+          <span class="total-label">Economia Mensal Total</span>
+          <span class="total-value" id="total-mensal">R$ 0,00</span>
+        </div>
+        <div class="total-item">
+          <span class="total-label">Investimento Total</span>
+          <span class="total-value" id="total-investimento">R$ 0,00</span>
+        </div>
+        <div class="total-item">
+          <span class="total-label">Economia Anual Total</span>
+          <span class="total-value" id="total-anual">R$ 0,00</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- TELA: CALCULADORA -->
+    <section id="tela-calculadora" class="tela">
+      <div class="screen-header">
+        <h2 class="screen-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/></svg>
+          Calculadora Solar
+        </h2>
+      </div>
+
+      <div class="calc-hero">
+        <div class="calc-hero-icon">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="24" r="10"/><line x1="24" y1="2" x2="24" y2="6"/><line x1="24" y1="42" x2="24" y2="46"/><line x1="8.5" y1="8.5" x2="11.3" y2="11.3"/><line x1="36.7" y1="36.7" x2="39.5" y2="39.5"/><line x1="2" y1="24" x2="6" y2="24"/><line x1="42" y1="24" x2="46" y2="24"/><line x1="8.5" y1="39.5" x2="11.3" y2="36.7"/><line x1="36.7" y1="11.3" x2="39.5" y2="8.5"/></svg>
+        </div>
+        <div class="calc-hero-text">
+          <h3>Simule sua Economia Real</h3>
+          <p>Tarifa Enel SP &middot; 6% a.a. de crescimento tarifário</p>
+        </div>
+      </div>
+
+      <div class="calc-card">
+
+        <div class="calc-section-label">
+          <span class="calc-section-dot calc-dot--cyan"></span>Consumo Mensal (kWh)
+        </div>
+        <div class="calc-slider-group">
+          <div class="slider-row">
+            <button id="btn-menos" class="slider-btn slider-btn--minus" type="button" aria-label="Diminuir consumo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+            <div class="slider-wrap">
+              <input type="range" id="slider-consumo" class="slider-consumo" min="50" max="2000" step="10" value="300">
+            </div>
+            <button id="btn-mais" class="slider-btn slider-btn--plus" type="button" aria-label="Aumentar consumo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+          <div class="slider-value-display">
+            <span id="valor-consumo" class="slider-current-value">300</span>
+            <span class="slider-unit">kWh / mês</span>
+          </div>
+        </div>
+
+        <div class="calc-section-label" style="margin-top:4px">
+          <span class="calc-section-dot calc-dot--gold"></span>Valor da Conta Mensal (R$)
+        </div>
+        <div class="calc-conta-group">
+          <div class="calc-conta-input-wrap">
+            <span class="calc-conta-prefix">R$</span>
+            <input type="number" id="input-conta" class="calc-conta-input" min="0" step="0.01" placeholder="0,00" aria-label="Valor da conta mensal">
+          </div>
+          <p class="calc-conta-hint">Informe o valor da conta e o consumo será ajustado automaticamente</p>
+        </div>
+
+        <div class="calc-section-label" style="margin-top:4px">
+          <span class="calc-section-dot calc-dot--green"></span>Período de Análise
+        </div>
+        <div class="calc-slider-group">
+          <div class="slider-row">
+            <button id="btn-anos-menos" class="slider-btn slider-btn--minus" type="button" aria-label="Diminuir anos">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+            <div class="slider-wrap">
+              <input type="range" id="slider-anos" class="slider-consumo slider-anos" min="1" max="40" step="1" value="20">
+            </div>
+            <button id="btn-anos-mais" class="slider-btn slider-btn--plus" type="button" aria-label="Aumentar anos">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+          <div class="slider-value-display">
+            <span id="valor-anos" class="slider-current-value" style="font-size:1.5rem">20</span>
+            <span class="slider-unit">anos de projeção</span>
+          </div>
+        </div>
+
+        <button id="btn-calcular" class="btn-primary calc-ok-btn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Calcular Economia
+        </button>
+
+        <div id="calc-resultado" class="calc-resultado" aria-live="polite"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== BOTTOM NAV ===== -->
+  <nav class="bottom-nav" role="navigation" aria-label="Navegação principal">
+    <button class="bnav-item bnav-item--ativo" data-tela="form" aria-label="Início">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Início</span>
+    </button>
+    <button class="bnav-item" data-tela="orcamentos" aria-label="Orçamentos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+      <span>Orçamentos</span>
+    </button>
+    <button class="bnav-item" data-tela="financas" aria-label="Finanças">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      <span>Finanças</span>
+    </button>
+    <button class="bnav-item" data-tela="calculadora" aria-label="Calculadora">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/></svg>
+      <span>Calculadora</span>
+    </button>
+  </nav>
+
+
+  <!-- ===== MODAL COMPARTILHAR / IMPRIMIR ===== -->
+  <div id="share-modal" class="share-modal" role="dialog" aria-modal="true" aria-labelledby="share-modal-title" aria-hidden="true">
+    <div class="share-modal-box">
+      <div class="share-modal-header">
+        <span id="share-modal-title" class="share-modal-title">Compartilhar Orçamento</span>
+        <button id="share-modal-close" class="share-modal-close" aria-label="Fechar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="share-modal-body">
+        <button id="share-whatsapp" class="share-btn share-btn--whatsapp">
+          <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.99 2C6.477 2 2 6.477 2 11.99c0 2.064.602 3.987 1.64 5.596L2 22l4.507-1.619A9.933 9.933 0 0 0 11.99 22C17.523 22 22 17.523 22 11.99 22 6.477 17.523 2 11.99 2z"/></svg>
+          WhatsApp
+        </button>
+        <button id="share-email" class="share-btn share-btn--email">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          E-mail
+        </button>
+        <button id="share-telegram" class="share-btn share-btn--telegram">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+          Telegram
+        </button>
+        <div class="share-divider"><span>ou</span></div>
+        <button id="share-print" class="share-btn share-btn--print">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Imprimir / Salvar PDF
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

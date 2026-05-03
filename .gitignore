@@ -1,0 +1,14 @@
+# Temporários de patch/build
+_patch.js
+_fix_logo.js
+assets/logo_b64.txt
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+*.suo
+*.user

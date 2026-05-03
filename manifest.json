@@ -1,0 +1,26 @@
+{
+  "name": "EFV Solar — Orçamentos Fotovoltaicos",
+  "short_name": "EFV Solar",
+  "description": "Formulário de orçamento para instalações fotovoltaicas EFV Solar",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#111827",
+  "theme_color": "#FFB800",
+  "lang": "pt-BR",
+  "categories": ["business", "utilities"],
+  "icons": [
+    {
+      "src": "./assets/efv_solar.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/efv_solar.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
