@@ -204,6 +204,7 @@ class HouseBuilder {
   luzJanela1  = null;
   luzJanela2  = null;
   luzPoste    = null;
+  luzQuadro   = null;
   caboParede  = null;
   slopeAngle  = 0;
   roofNormal  = [new THREE.Vector3(), new THREE.Vector3()];
@@ -408,22 +409,65 @@ class HouseBuilder {
   #quadroEletrico() {
     const { W, D, FH, H, WT } = CASA;
     const qx = W / 2 + WT / 2 + 0.01;
-    const qy = FH + H * 0.46;
-    const qz = D * 0.3;
+    const qy = FH + H * 0.50;
+    const qz = D * 0.28;
 
-    const caixa = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.72, 0.54), MaterialLibrary.metalEscuro());
+    /* ── Caixa principal ─────────────────────────────────────────────── */
+    const caixa = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.0, 0.62), MaterialLibrary.metalEscuro());
     caixa.position.set(qx, qy, qz); caixa.scale.set(0, 0, 0); caixa.name = 'quadro';
     this.#grp.add(caixa);
 
-    const led = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.3),
-      new THREE.MeshStandardMaterial({ color: 0x003300, emissive: 0x002200, emissiveIntensity: 0 }));
-    led.position.set(qx + 0.08, qy + 0.16, qz); led.name = 'quadro-led';
+    /* tampa frontal levemente saliente */
+    const tampa = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.92, 0.55),
+      new THREE.MeshStandardMaterial({ color: 0x2a3a4a, roughness: 0.4, metalness: 0.7 }));
+    tampa.position.set(qx + 0.07, qy, qz); tampa.scale.set(0, 0, 0); tampa.name = 'quadro-tampa';
+    this.#grp.add(tampa);
+
+    /* ── Trilho DIN ──────────────────────────────────────────────────── */
+    const trilho = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.02, 0.46),
+      new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.95, roughness: 0.1 }));
+    trilho.position.set(qx + 0.065, qy + 0.08, qz); trilho.scale.set(0, 0, 0); trilho.name = 'trilho-din';
+    this.#grp.add(trilho);
+
+    /* ── 4 Disjuntores sobre o trilho ────────────────────────────────── */
+    const dCores = [0xdd2222, 0x2244cc, 0x22aa44, 0x2244cc];
+    for (let i = 0; i < 4; i++) {
+      const d = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.22, 0.08),
+        new THREE.MeshStandardMaterial({ color: dCores[i], roughness: 0.5, metalness: 0.2,
+          emissive: new THREE.Color(0x000000), emissiveIntensity: 0 }));
+      d.position.set(qx + 0.065, qy + 0.08, qz - 0.17 + i * 0.115);
+      d.scale.set(0, 0, 0); d.name = `disj-${i}`;
+      this.#grp.add(d);
+    }
+
+    /* ── Chave Geral (DR) — maior, no topo ───────────────────────────── */
+    const chave = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.30, 0.13),
+      new THREE.MeshStandardMaterial({ color: 0x333344, roughness: 0.4, metalness: 0.55 }));
+    chave.position.set(qx + 0.065, qy + 0.37, qz); chave.scale.set(0, 0, 0); chave.name = 'chave-geral';
+    this.#grp.add(chave);
+
+    /* alavanca da chave — rota na animação (off → on) */
+    const alavanca = new THREE.Mesh(new THREE.BoxGeometry(0.013, 0.13, 0.03),
+      new THREE.MeshStandardMaterial({ color: 0xff2222, roughness: 0.3 }));
+    alavanca.position.set(qx + 0.073, qy + 0.44, qz); alavanca.scale.set(0, 0, 0); alavanca.name = 'chave-alavanca';
+    this.#grp.add(alavanca);
+
+    /* ── LED de status esférico (vermelho → verde) ───────────────────── */
+    const led = new THREE.Mesh(new THREE.SphereGeometry(0.013, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0x220000, emissive: new THREE.Color(0x880000), emissiveIntensity: 0 }));
+    led.position.set(qx + 0.075, qy + 0.30, qz + 0.24); led.name = 'quadro-led';
     this.#grp.add(led);
 
-    const disj = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.09),
-      new THREE.MeshStandardMaterial({ color: 0xdd1111, emissive: 0x330000 }));
-    disj.position.set(qx + 0.08, qy - 0.08, qz + 0.06); disj.scale.set(0, 0, 0); disj.name = 'disjuntor';
-    this.#grp.add(disj);
+    /* ── Medidor / LCD ───────────────────────────────────────────────── */
+    const medidor = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.10, 0.20),
+      new THREE.MeshStandardMaterial({ color: 0x001100, emissive: new THREE.Color(0x003300), emissiveIntensity: 0 }));
+    medidor.position.set(qx + 0.075, qy - 0.22, qz); medidor.scale.set(0, 0, 0); medidor.name = 'medidor';
+    this.#grp.add(medidor);
+
+    /* luz interna do quadro — acende junto com as luzes da casa */
+    this.luzQuadro = new THREE.PointLight(0x44FF88, 0, 2.8);
+    this.luzQuadro.position.set(qx + 0.3, qy + 0.1, qz);
+    this.#scene.add(this.luzQuadro);
 
     this.quadroPos.set(qx, qy, qz);
   }
@@ -445,25 +489,45 @@ class HouseBuilder {
   #buildCaboParede() {
     const { W, D, FH, H, WT } = CASA;
     const qPos = this.quadroPos;
-    /* cabo corre pela face EXTERIOR da parede direita: x = W/2 + WT/2 + 0.04 */
     const xExt = W / 2 + WT / 2 + 0.04;
-    const curve = new THREE.CatmullRomCurve3([
+    /* pontos que definem o percurso exato pela face exterior da parede direita */
+    const pts = [
       v3(xExt, FH + H + 0.08, -D * 0.22),
-      v3(xExt, FH + H * 0.78,  D * 0.05),
-      v3(xExt, FH + H * 0.58,  qPos.z * 0.6),
-      v3(xExt, qPos.y,          qPos.z),
-    ]);
-    const geo  = new THREE.TubeGeometry(curve, 48, 0.022, 6, false);
+      v3(xExt, FH + H * 0.80,  D * 0.00),
+      v3(xExt, FH + H * 0.60,  qPos.z * 0.55),
+      v3(xExt, qPos.y + 0.02,  qPos.z),
+    ];
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const geo   = new THREE.TubeGeometry(curve, 64, 0.022, 6, false);
     geo.setDrawRange(0, 0);
-    const mesh = new THREE.Mesh(geo, MaterialLibrary.cabo());
+    const mesh  = new THREE.Mesh(geo, MaterialLibrary.cabo());
     mesh.castShadow = true;
     this.#grp.add(mesh);
-    this.caboParede = { mesh, totalCount: geo.index.count };
+
+    /* abraçadeiras metálicas nos pontos de dobra — aparecem junto com o cabo */
+    const matAbr       = MaterialLibrary.metalEscuro();
+    const abracadeiras = pts.map(pt => {
+      const a = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.04, 0.055), matAbr);
+      a.position.copy(pt); a.visible = false;
+      this.#grp.add(a); return a;
+    });
+
+    /* luz que percorre o cabo durante o acionamento elétrico */
+    const flowLight = new THREE.PointLight(0xFF7700, 0, 3.5);
+    this.#scene.add(flowLight);
+
+    this.caboParede = { mesh, curve, totalCount: geo.index.count, abracadeiras, flowLight };
   }
 
   animarCaboParede(p) {
     if (!this.caboParede) return;
-    this.caboParede.mesh.geometry.setDrawRange(0, Math.round(clamp01(p) * this.caboParede.totalCount));
+    const pC = clamp01(p);
+    this.caboParede.mesh.geometry.setDrawRange(0, Math.round(pC * this.caboParede.totalCount));
+    /* abraçadeiras aparecem conforme o cabo chega em cada ponto de dobra */
+    const n = this.caboParede.abracadeiras.length;
+    for (let i = 0; i < n; i++) {
+      this.caboParede.abracadeiras[i].visible = pC >= (i + 1) / (n + 1);
+    }
   }
 }
 
@@ -652,12 +716,20 @@ class SolarInstaller {
    ───────────────────────────────────────────────────────────────────── */
 class EnergyFlow {
   #scene;
-  #curves = [];
-  #orbs   = [];
+  #curves    = [];
+  #caboCurve = null;
+  #flowLight = null;
+  #orbs      = [];
 
   constructor(scene) { this.#scene = scene; }
 
   addCurves(curves) { for (const c of curves) this.#curves.push(c); }
+
+  /* registra a curva + luz do cabo da parede para o fluxo elétrico */
+  addCaboCurve(caboParedeRef) {
+    this.#caboCurve = caboParedeRef.curve;
+    this.#flowLight = caboParedeRef.flowLight;
+  }
 
   build() {
     for (let i = 0; i < 4; i++) {
@@ -680,7 +752,10 @@ class EnergyFlow {
     }
   }
 
-  reset() { for (const orb of this.#orbs) orb.light.intensity = 0; }
+  reset() {
+    for (const orb of this.#orbs) orb.light.intensity = 0;
+    if (this.#flowLight) this.#flowLight.intensity = 0;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -771,6 +846,22 @@ class CameraController {
     this.#orbiting   = true;
   }
 
+  /* câmera acompanha um ponto 3D em movimento — usado para seguir o cabo descendo */
+  followPoint(pt, dx = 1.8, dy = 0.4) {
+    this.#targetPos.set(pt.x + dx, pt.y + dy, pt.z + 0.15);
+    this.#targetTgt.copy(pt);
+    this.#smooth   = 0.12;
+    this.#orbiting = false;
+  }
+
+  /* câmera acompanha um ponto 3D móvel — usado para seguir o cabo descendo */
+  followPoint(pt, dx = 1.8, dy = 0.4) {
+    this.#targetPos.set(pt.x + dx, pt.y + dy, pt.z + 0.15);
+    this.#targetTgt.copy(pt);
+    this.#smooth   = 0.12;
+    this.#orbiting = false;
+  }
+
   update(dt) {
     if (this.#orbiting) {
       this.#orbitAngle += dt * 0.00022;
@@ -795,11 +886,11 @@ class CameraController {
    ───────────────────────────────────────────────────────────────────── */
 class AnimationController {
   static #STAGES = [
-    { dur: 2200 }, { dur: 1500 }, { dur: 1200 }, { dur:  800 }, { dur: 2800 },
-    { dur: 1000 }, { dur: 1800 }, { dur: 1500 }, { dur: 1200 }, { dur:  800 },
-    { dur: 2800 }, { dur: 1000 }, { dur: 1800 }, { dur:  900 }, { dur:  900 },
-    { dur: 1800 }, { dur: 1200 }, { dur: 1500 }, { dur: 1800 }, { dur: 1600 },
-    { dur: 2200 }, { dur: Infinity },
+    { dur: 2200 }, { dur: 1500 }, { dur: 1200 }, { dur:  800 }, { dur: 2800 }, //  0-4
+    { dur: 1000 }, { dur: 1800 }, { dur: 1500 }, { dur: 1200 }, { dur:  800 }, //  5-9
+    { dur: 2800 }, { dur: 1000 }, { dur: 2200 }, { dur: 1000 }, { dur: 2400 }, // 10-14
+    { dur:  900 }, { dur: 1000 }, { dur: 1200 }, { dur: 1000 }, { dur: 2000 }, // 15-19
+    { dur: 1200 }, { dur: 1600 }, { dur: 2200 }, { dur: Infinity },            // 20-23
   ];
 
   #models;
@@ -838,7 +929,7 @@ class AnimationController {
   }
 
   #configurarWaypoints() {
-    const { W, D, FH, H, RA } = CASA;
+    const { W, D, FH, H, RA, WT } = CASA;
     const h     = this.#models.house;
     const r1    = h.roof1Center.clone();
     const r2    = h.roof2Center.clone();
@@ -846,28 +937,44 @@ class AnimationController {
     const ridge = v3(0, FH + H + RA + 0.3, 0);
     const wS    = W / 2 + 3.8;
 
+    /* posição do topo da parede direita onde o cabo sai do beiral */
+    const xExt  = W / 2 + WT / 2 + 0.18;
+    const topoP = v3(xExt, FH + H + 0.5, -D * 0.22);
+
     this.#wp = {
-      0:  { pos: v3(0, 26, -22),                          look: v3(0, FH + H, 0),        smooth: 0.04 },
-      1:  { pos: v3(-4, 13, -15),                         look: r1,                       smooth: 0.07 },
-      2:  { pos: v3(-2, 11, -13),                         look: r1,                       smooth: 0.07 },
-      3:  { pos: v3(wS - 1, FH + H, -D * 0.4),            look: r1,                       smooth: 0.08 },
-      4:  { pos: v3(wS - 1, FH + H * 1.1, -D * 0.4),      look: r1,                       smooth: 0.07 },
-      5:  { pos: v3(wS - 1, FH + H * 1.1, -D * 0.4),      look: r1,                       smooth: 0.05 },
-      6:  { pos: v3(-2, 12, 0),                            look: ridge,                    smooth: 0.06 },
-      7:  { pos: v3(-4, 13, 15),                           look: r2,                       smooth: 0.07 },
-      8:  { pos: v3(-2, 11, 13),                           look: r2,                       smooth: 0.07 },
-      9:  { pos: v3(wS - 1, FH + H, D * 0.4),              look: r2,                       smooth: 0.08 },
-      10: { pos: v3(wS - 1, FH + H * 1.1, D * 0.4),        look: r2,                       smooth: 0.07 },
-      11: { pos: v3(wS - 1, FH + H * 1.1, D * 0.4),        look: r2,                       smooth: 0.05 },
-      12: { pos: v3(W / 2 + 3.5, FH + H * 0.6, q.z + 0.8), look: q,                        smooth: 0.07 },
-      13: { pos: v3(W / 2 + 2.2, FH + H * 0.5, q.z),        look: q,                        smooth: 0.09 },
-      14: { pos: v3(W / 2 + 2.2, FH + H * 0.5, q.z),        look: q,                        smooth: 0.05 },
-      15: { pos: v3(0, 26, -22),                           look: v3(0, FH + H * 0.6, 0),  smooth: 0.04 },
-      16: { pos: v3(-3, 14, -14),                          look: r1,                       smooth: 0.06 },
-      17: { pos: v3(-3, 14, -14),                          look: r1,                       smooth: 0.05 },
-      18: { pos: v3(W / 2 + 3.5, FH + H, q.z + 1),         look: q,                        smooth: 0.07 },
-      19: { pos: v3(0, 11, -22),                           look: v3(0, FH + H * 0.5, 0),  smooth: 0.05 },
-      20: { pos: v3(0, 11, -22),                           look: v3(0, FH + H * 0.5, 0),  smooth: 0.04 },
+      0:  { pos: v3(0, 26, -22),                                look: v3(0, FH + H, 0),        smooth: 0.04 },
+      1:  { pos: v3(-4, 13, -15),                               look: r1,                       smooth: 0.07 },
+      2:  { pos: v3(-2, 11, -13),                               look: r1,                       smooth: 0.07 },
+      3:  { pos: v3(wS - 1, FH + H, -D * 0.4),                  look: r1,                       smooth: 0.08 },
+      4:  { pos: v3(wS - 1, FH + H * 1.1, -D * 0.4),            look: r1,                       smooth: 0.07 },
+      5:  { pos: v3(wS - 1, FH + H * 1.1, -D * 0.4),            look: r1,                       smooth: 0.05 },
+      6:  { pos: v3(-2, 12, 0),                                  look: ridge,                    smooth: 0.06 },
+      7:  { pos: v3(-4, 13, 15),                                 look: r2,                       smooth: 0.07 },
+      8:  { pos: v3(-2, 11, 13),                                 look: r2,                       smooth: 0.07 },
+      9:  { pos: v3(wS - 1, FH + H, D * 0.4),                   look: r2,                       smooth: 0.08 },
+      10: { pos: v3(wS - 1, FH + H * 1.1, D * 0.4),             look: r2,                       smooth: 0.07 },
+      11: { pos: v3(wS - 1, FH + H * 1.1, D * 0.4),             look: r2,                       smooth: 0.05 },
+      /* 12: energy-telhado — câmera lateral para ver os dois lados */
+      12: { pos: v3(wS - 0.5, FH + H * 1.2, 0),                 look: ridge,                    smooth: 0.05 },
+      /* 13: câmera sobe ao topo da parede onde o cabo começa a descer */
+      13: { pos: v3(xExt + 1.8, FH + H + 0.8, -D * 0.22 + 0.2), look: topoP,                    smooth: 0.08 },
+      /* 14: DINÂMICO — controlado por followPoint() no dispatch */
+      /* 15: câmera chega no quadro */
+      15: { pos: v3(W / 2 + 2.2, FH + H * 0.5, q.z),            look: q,                        smooth: 0.09 },
+      /* 16: quadro abre — câmera bem perto */
+      16: { pos: v3(W / 2 + 1.6, q.y + 0.15, q.z + 0.2),        look: q,                        smooth: 0.09 },
+      /* 17: disjuntor liga */
+      17: { pos: v3(W / 2 + 1.4, q.y + 0.25, q.z + 0.15),       look: q,                        smooth: 0.08 },
+      /* 18: luzes acendem — câmera recua levemente */
+      18: { pos: v3(W / 2 + 2.5, FH + H * 0.6, q.z + 0.5),      look: q,                        smooth: 0.07 },
+      /* 19: órbita — startOrbit() via callback */
+      19: { pos: v3(0, 26, -22),                                 look: v3(0, FH + H * 0.6, 0),  smooth: 0.04 },
+      /* 20: emissivo pulsa */
+      20: { pos: v3(-3, 14, -14),                                look: r1,                       smooth: 0.06 },
+      /* 21: wide-shot */
+      21: { pos: v3(0, 11, -22),                                 look: v3(0, FH + H * 0.5, 0),  smooth: 0.05 },
+      /* 22: branding */
+      22: { pos: v3(0, 11, -22),                                 look: v3(0, FH + H * 0.5, 0),  smooth: 0.04 },
     };
   }
 
@@ -899,6 +1006,8 @@ class AnimationController {
 
     switch (this.#stage) {
       case 0:  break;
+
+      /* ── Água 1 (frente) ──────────────────────────────────────────── */
       case 1:  s.solar1.animarTrilhos(p); break;
       case 2:  s.solar1.animarCabos(p); break;
       case 3:  s.solar1.animarInversores(p); break;
@@ -910,6 +1019,8 @@ class AnimationController {
       case 6:
         this.#glow1.intensity = Math.max(0, 1.8 - p * 3.5);
         break;
+
+      /* ── Água 2 (fundo) ───────────────────────────────────────────── */
       case 7:  s.solar2.animarTrilhos(p); break;
       case 8:  s.solar2.animarCabos(p); break;
       case 9:  s.solar2.animarInversores(p); break;
@@ -918,48 +1029,107 @@ class AnimationController {
         this.#glow2.intensity = (Math.sin(p * Math.PI * 3) * 0.5 + 0.5) * 2.2;
         s.solar2.ativarEmissivo(Math.sin(p * Math.PI) * 0.65);
         break;
+
+      /* ── 12: Energy Flow pelo telhado — ambas as águas ────────────── */
       case 12:
         this.#glow2.intensity = Math.max(0, 1.8 - p * 3.5);
+        s.solar1.ativarEmissivo(0.5 + Math.sin(p * Math.PI * 5) * 0.35);
+        s.solar2.ativarEmissivo(0.5 + Math.sin(p * Math.PI * 5 + 0.5) * 0.35);
+        this.#ef?.tickTelhado(p);
+        this.#glow1.intensity = 0.8 + Math.sin(p * Math.PI * 4) * 0.5;
         break;
-      case 13: {
-        const quadro = this.#scene.getObjectByName('quadro');
-        const disj   = this.#scene.getObjectByName('disjuntor');
-        if (quadro) { const sc = easeOutBack(p); quadro.scale.set(sc, sc, sc); }
-        if (disj)   { const sc = easeOutBack(clamp01((p - 0.5) * 2)); disj.scale.set(sc, sc, sc); }
+
+      /* ── 13: Câmera sobe ao topo da parede ───────────────────────── */
+      case 13:
+        this.#ef?.reset();
+        this.#glow1.intensity = Math.max(0, 1.2 - p * 2);
         break;
-      }
+
+      /* ── 14: Cabo desce — câmera acompanha em tempo real ─────────── */
       case 14: {
-        const disj = this.#scene.getObjectByName('disjuntor');
-        if (disj) disj.rotation.z = -p * Math.PI * 0.35;
-        const i = easeInOut(p) * 2.2;
-        const h = s.house;
-        if (h.luzJanela1) h.luzJanela1.intensity = i;
-        if (h.luzJanela2) h.luzJanela2.intensity = i;
-        if (h.luzPoste)   h.luzPoste.intensity   = easeInOut(p) * 2.8;
-        const led = this.#scene.getObjectByName('quadro-led');
-        if (led) led.material.emissiveIntensity = p * 1.8;
+        s.house.animarCaboParede(p);
+        const cabo = s.house.caboParede;
+        if (cabo?.curve) {
+          const pt = cabo.curve.getPoint(easeInOut(clamp01(p)));
+          this.#cam.followPoint(pt, 1.8, 0.35);
+        }
         break;
       }
+
+      /* ── 15: Câmera chega no quadro (waypoint estático) ──────────── */
       case 15: break;
-      case 16:
+
+      /* ── 16: Quadro elétrico abre com todos os componentes ─────────── */
+      case 16: {
+        for (const nome of ['quadro', 'quadro-tampa', 'trilho-din', 'chave-geral', 'chave-alavanca', 'medidor']) {
+          const obj = this.#scene.getObjectByName(nome);
+          if (obj) { const sc = easeOutBack(clamp01(p)); obj.scale.set(sc, sc, sc); }
+        }
+        for (let i = 0; i < 4; i++) {
+          const d = this.#scene.getObjectByName(`disj-${i}`);
+          if (d) { const sc = easeOutBack(clamp01((p - i * 0.18) / 0.4)); d.scale.set(sc, sc, sc); }
+        }
+        const led16 = this.#scene.getObjectByName('quadro-led');
+        if (led16) {
+          led16.material.emissive.setHex(0x880000);
+          led16.material.emissiveIntensity = (Math.sin(p * Math.PI * 6) * 0.5 + 0.5) * 1.2;
+        }
+        break;
+      }
+
+      /* ── 17: Disjuntor liga — fluxo luminoso pelo cabo ───────────── */
+      case 17: {
+        const alavanc = this.#scene.getObjectByName('chave-alavanca');
+        if (alavanc) alavanc.rotation.z = -easeInOut(p) * Math.PI * 0.45;
+        this.#ef?.tickCabo(p);
+        for (let i = 0; i < 4; i++) {
+          const d     = this.#scene.getObjectByName(`disj-${i}`);
+          const local = clamp01((p - i * 0.15) / 0.45);
+          if (d) { d.material.emissive.setHex(0x00cc44); d.material.emissiveIntensity = easeInOut(local) * 0.9; }
+        }
+        const led17 = this.#scene.getObjectByName('quadro-led');
+        if (led17) {
+          const g = easeInOut(p);
+          led17.material.emissive.setRGB(0.53 * (1 - g), 0.53 * g * 2, 0.27 * g);
+          led17.material.emissiveIntensity = 1.5 + Math.sin(p * Math.PI * 3) * 0.5;
+        }
+        const med = this.#scene.getObjectByName('medidor');
+        if (med) med.material.emissiveIntensity = easeInOut(p) * 1.8;
+        break;
+      }
+
+      /* ── 18: Luzes da casa acendem ───────────────────────────────── */
+      case 18: {
+        const il = easeInOut(p) * 2.2;
+        const h  = s.house;
+        if (h.luzJanela1) h.luzJanela1.intensity = il;
+        if (h.luzJanela2) h.luzJanela2.intensity = il;
+        if (h.luzPoste)   h.luzPoste.intensity   = easeInOut(p) * 2.8;
+        if (h.luzQuadro)  h.luzQuadro.intensity  = easeInOut(p) * 1.4;
+        const led18 = this.#scene.getObjectByName('quadro-led');
+        if (led18) { led18.material.emissive.setHex(0x00FF44); led18.material.emissiveIntensity = 1.8; }
+        break;
+      }
+
+      /* ── 19: Órbita (startOrbit via callback) ────────────────────── */
+      case 19: break;
+
+      /* ── 20: Emissivo pulsa — plano geral ────────────────────────── */
+      case 20:
         s.solar1.ativarEmissivo(0.55 + Math.sin(p * Math.PI * 4) * 0.35);
         s.solar2.ativarEmissivo(0.55 + Math.sin(p * Math.PI * 4 + 0.6) * 0.35);
         this.#glow1.intensity = 0.8 + Math.sin(p * Math.PI * 3) * 0.4;
         this.#glow2.intensity = 0.8 + Math.sin(p * Math.PI * 3 + 0.8) * 0.4;
         break;
-      case 17:
-        this.#ef?.tick(p);
-        s.solar1.ativarEmissivo(0.7); s.solar2.ativarEmissivo(0.7);
-        break;
-      case 18:
-        s.house.animarCaboParede(p);
-        this.#ef?.reset();
-        this.#glow1.intensity = Math.max(0, 1.5 - p * 2);
-        this.#glow2.intensity = Math.max(0, 1.5 - p * 2);
-        break;
-      case 19: break;
-      case 20: break;
+
+      /* ── 21: Wide-shot final ─────────────────────────────────────── */
       case 21: break;
+
+      /* ── 22: Branding ────────────────────────────────────────────── */
+      case 22: break;
+
+      /* ── 23: Estático ────────────────────────────────────────────── */
+      case 23: break;
     }
   }
 }
@@ -1064,6 +1234,7 @@ class AnimacaoMontagem {
     this.#ef.addCurves(this.#ml.solar1.getCurves());
     this.#ef.addCurves(this.#ml.solar2.getCurves());
     this.#ef.build();
+    if (this.#ml.house.caboParede) this.#ef.addCaboCurve(this.#ml.house.caboParede);
     this.#sound = new SoundController();
     this.#ac = new AnimationController(this.#sm.scene, this.#ml, this.#cc, this.#ef, this.#sound);
     this.#bindCallbacks(canvasEl);
@@ -1073,10 +1244,11 @@ class AnimacaoMontagem {
   #bindCallbacks(canvasEl) {
     this.#ac.onStageEnter(4,  () => this.#sound.tocarEncaixe());
     this.#ac.onStageEnter(10, () => this.#sound.tocarEncaixe());
-    this.#ac.onStageEnter(15, () => this.#cc.startOrbit());
-    this.#ac.onStageEnter(18, () => this.#sound.tocarEletrico());
-    this.#ac.onStageEnter(20, () => this.#mostrarBranding(canvasEl));
-    this.#ac.onStageEnter(21, () => { this.#sm.render(); this.parar(); });
+    this.#ac.onStageEnter(14, () => this.#sound.tocarEletrico());
+    this.#ac.onStageEnter(17, () => this.#sound.tocarEletrico());
+    this.#ac.onStageEnter(19, () => this.#cc.startOrbit());
+    this.#ac.onStageEnter(22, () => this.#mostrarBranding(canvasEl));
+    this.#ac.onStageEnter(23, () => { this.#sm.render(); this.parar(); });
   }
 
   #mostrarBranding(canvasEl) {
