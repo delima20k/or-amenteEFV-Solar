@@ -107,7 +107,7 @@ class MenuController {
    ROUTER — troca de telas
    =================================================== */
 class Router {
-  #telaAtual = 'form';
+  #telaAtual = 'home';
   #onTela;
 
   constructor(onTela) {
@@ -636,7 +636,7 @@ class CalculadoraController {
     set('investimento',    c.investimento);
     set('inflacao',        (CalculadoraController.#CRESCIMENTO * 100).toFixed(0) + '%');
     set('economia',        `${c.consumo} kWh/mês — Retorno em ${c.retornoMeses} meses`);
-    document.querySelectorAll('[data-tela="form"]')[0]?.click();
+    document.querySelectorAll('[data-tela="formulario"]')[0]?.click();
   }
 
   getUltimoCalc() { return this.#ultimoCalc; }
@@ -853,6 +853,8 @@ class EfvSolarApp {
 
   #vincularEventos() {
     this.#btnGerar.addEventListener('click', () => this.#salvarEGerarPDF());
+    document.getElementById('btn-novo-orcamento')
+      ?.addEventListener('click', () => this.#router.navegar('formulario'));
   }
 
   #coletarDados() {
