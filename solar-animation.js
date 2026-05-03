@@ -3,26 +3,20 @@
 /* =====================================================================
    AnimacaoMontagem — Three.js r134
    Arquitetura:
-     MaterialLibrary    — texturas PBR procedurais
-     Ground             — solo, calçada
-     Foundation         — laje de fundação
-     Walls              — paredes + empenas
-     Roof               — telhado duas águas + cumeeira + beiral
-     Windows            — janelas com moldura + vidro
-     Door               — porta de entrada + degrau
-     Chimney            — chaminé decorativa
-     Garden             — arbustos, árvore
-     Pole               — poste de rua + fiação
-     RackingStructure   — trilhos + longarinas de alumínio no telhado
-     Inverter           — caixa inversora + cabo animado (drawRange)
-     SolarPanelArray    — 12 painéis fotovoltaicos animados
-     CameraController   — órbita e posicionamento suave por fase
-     AnimationSequencer — loop de 30s, 5 fases
-     HouseBuilder       — orquestra todos os módulos
-     SceneManager       — renderer, câmera, luzes
-     AnimacaoMontagem   — fachada pública + RAF loop
-   Fases: 0 ORBIT_INTRO(0–4s) | 1 RACKING(4–12s) | 2 INVERTER(12–16s)
-          3 PANELS(16–28s)    | 4 COMPLETE(28–30s) → loop
+     MaterialLibrary  — texturas PBR procedurais
+     Ground           — solo, calçada
+     Foundation       — laje de fundação
+     Walls            — paredes + empenas
+     Roof             — telhado duas águas + cumeeira + beiral
+     Windows          — janelas com moldura + vidro
+     Door             — porta de entrada + degrau
+     Chimney          — chaminé decorativa
+     Garden           — arbustos, árvore
+     Pole             — poste de rua + fiação
+     SolarRoofSystem  — trilhos e painéis solares auto-calculados
+     HouseBuilder     — orquestra todos os módulos
+     SceneManager     — renderer, câmera, luzes
+     AnimacaoMontagem — fachada pública
    API: constructor(canvas) · iniciar() · reiniciar() · parar()
    ===================================================================== */
 
@@ -773,6 +767,245 @@ class Pole {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+   SolarRoofSystem — trilhos de alumínio + painéis fotovoltaicos
+   Layout calculado automaticamente a partir da geometria real do telhado.
+   PANEL_W=1.1m  PANEL_H=2.0m  SPACING=0.1m  MARGIN=0.2m
+   → 2 cols × 5 rows × 2 águas = 20 painéis no total
+   Posicionamento: Roof.roofPoint(x, z, offset) → normal-based, sem clipagem
+   Orientação:     lookAt(pos + slopeNormal)     → paralelo ao slope
+   DEBUG=true  →  esferas + LineSegments no grid para validação visual
+   ───────────────────────────────────────────────────────────────────── */
+class SolarRoofSystem {
+  /* ── Constantes de layout ── */
+  static #MARGIN   = 0.2;
+  static #PANEL_W  = 1.1;
+  static #PANEL_H  = 2.0;
+  static #SPACING  = 0.1;
+  static #OFFSET   = 0.05;   // afastamento normal acima do telhado
+  static #DEBUG    = false;  // true → esferas e grid visíveis
+
+  /* ── Normal unitária de cada água ── */
+  static #slopeNormal(side) {
+    const { RA, W } = CASA;
+    const a = Math.atan2(RA, W / 2);
+    // side=-1 (esq): aponta para cima-esquerda; side=+1 (dir): cima-direita
+    return new THREE.Vector3(-side * Math.sin(a), Math.cos(a), 0);
+  }
+
+  /* ── Layout: posições dos painéis e trilhos por água ── */
+  static #layout(side) {
+    const M  = SolarRoofSystem.#MARGIN;
+    const PW = SolarRoofSystem.#PANEL_W;
+    const PH = SolarRoofSystem.#PANEL_H;
+    const SP = SolarRoofSystem.#SPACING;
+    const { W, D, EV } = CASA;
+
+    // Limites da água (parede sem beiral decorativo)
+    const xEdge  = W / 2;                    // 3.6
+    const zHalf  = D / 2 + EV;              // 5.55
+
+    // Área útil com margem
+    const xUsable = xEdge  - M;             // 3.4
+    const zUsable = zHalf  - M;             // 5.35 (cada extremo)
+
+    const cols = Math.floor((xUsable * 2 - M) / (PW + SP)); // 2
+    const rows = Math.floor((zUsable * 2 - M) / (PH + SP)); // 5
+
+    const totalW = cols * PW + (cols - 1) * SP;  // largura total das colunas
+    const totalH = rows * PH + (rows - 1) * SP;  // altura total das linhas
+
+    // Centro horizontal de cada água
+    const xCenter = side * (xEdge / 2);     // -1.8 ou +1.8
+
+    // Posições X dos painéis (centradas no lado)
+    const panelXs = [];
+    for (let c = 0; c < cols; c++) {
+      panelXs.push(xCenter - totalW / 2 + c * (PW + SP) + PW / 2);
+    }
+
+    // Posições Z (iguais para ambas as águas)
+    const panelZs = [];
+    for (let r = 0; r < rows; r++) {
+      panelZs.push(-totalH / 2 + r * (PH + SP) + PH / 2);
+    }
+
+    // Trilhos verticais (ao longo de Z, X fixo): 1 em cada borda + 1 entre colunas
+    const railXs = [
+      xCenter - totalW / 2 - SP / 2,
+      ...panelXs.map(x => x + PW / 2 + SP / 2).slice(0, cols - 1),
+      xCenter + totalW / 2 + SP / 2,
+    ];
+    // Garante exatamente cols+1 = 3 linhas verticais
+
+    // Trilhos horizontais (ao longo de X, Z fixo): 3 por água
+    const railZs = [
+      panelZs[0]                      - PH / 2 - SP / 2,
+      panelZs[Math.floor(rows / 2)]             ,
+      panelZs[rows - 1]               + PH / 2 + SP / 2,
+    ];
+
+    return { cols, rows, panelXs, panelZs, railXs, railZs,
+             xMin: xCenter - totalW / 2 - SP, xMax: xCenter + totalW / 2 + SP,
+             zMin: -zUsable, zMax: zUsable };
+  }
+
+  /* ── Helper: cilindro entre dois pontos 3D ── */
+  static #cylBetween(p1, p2, radius, mat) {
+    const dir = new THREE.Vector3().subVectors(p2, p1);
+    const len = dir.length();
+    if (len < 1e-4) return null;
+    const mesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius, radius, len, 6),
+      mat
+    );
+    mesh.position.copy(new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5));
+    mesh.quaternion.setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0),
+      dir.clone().normalize()
+    );
+    mesh.castShadow = true;
+    return mesh;
+  }
+
+  /* ── Trilhos de alumínio ── */
+  #buildRails(grp, side) {
+    const { railXs, railZs, xMin, xMax, zMin, zMax } = SolarRoofSystem.#layout(side);
+    const ROFF = 0.03;  // offset mínimo dos trilhos — abaixo dos painéis
+    const mat  = MaterialLibrary.aluminio();
+    const R    = 0.025;
+
+    // Trilhos horizontais (ao longo de X, Z fixo)
+    for (const z of railZs) {
+      const p1 = Roof.roofPoint(xMin, z, ROFF);
+      const p2 = Roof.roofPoint(xMax, z, ROFF);
+      const m  = SolarRoofSystem.#cylBetween(p1, p2, R, mat);
+      if (m) grp.add(m);
+    }
+
+    // Trilhos verticais (ao longo de Z, X fixo)
+    for (const x of railXs) {
+      const p1 = Roof.roofPoint(x, zMin, ROFF);
+      const p2 = Roof.roofPoint(x, zMax, ROFF);
+      const m  = SolarRoofSystem.#cylBetween(p1, p2, R, mat);
+      if (m) grp.add(m);
+    }
+  }
+
+  /* ── Painéis fotovoltaicos ── */
+  #buildPanels(grp, side) {
+    const { panelXs, panelZs } = SolarRoofSystem.#layout(side);
+    const OFFSET   = SolarRoofSystem.#OFFSET;
+    const PW       = SolarRoofSystem.#PANEL_W;
+    const PH       = SolarRoofSystem.#PANEL_H;
+    const norm     = SolarRoofSystem.#slopeNormal(side);
+    const panelMat = SolarRoofSystem.#panelMat();
+    const frameMat = MaterialLibrary.aluminio();
+
+    for (const x of panelXs) {
+      for (const z of panelZs) {
+        const pos    = Roof.roofPoint(x, z, OFFSET);
+        const lookAt = pos.clone().add(norm);
+
+        // Moldura
+        const frame = new THREE.Mesh(
+          new THREE.BoxGeometry(0.04, PW, PH),
+          frameMat
+        );
+        frame.position.copy(pos);
+        frame.lookAt(lookAt);
+        frame.castShadow = true;
+        grp.add(frame);
+
+        // Painel
+        const panel = new THREE.Mesh(
+          new THREE.PlaneGeometry(PW, PH),
+          panelMat
+        );
+        panel.position.copy(pos);
+        panel.lookAt(lookAt);
+        panel.castShadow = true;
+        grp.add(panel);
+      }
+    }
+  }
+
+  /* ── Debug: esferas nos pontos do grid + LineSegments ── */
+  #buildDebug(grp, side) {
+    const { panelXs, panelZs, railXs, railZs, xMin, xMax, zMin, zMax }
+      = SolarRoofSystem.#layout(side);
+    const dbgMat = new THREE.MeshBasicMaterial({ color: 0xff2200 });
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x00ff88 });
+    const sphGeo  = new THREE.SphereGeometry(0.05, 6, 6);
+
+    // Esferas em cada interseção
+    for (const x of panelXs) {
+      for (const z of panelZs) {
+        const s = new THREE.Mesh(sphGeo, dbgMat);
+        s.position.copy(Roof.roofPoint(x, z, 0.12));
+        grp.add(s);
+      }
+    }
+
+    // Linhas H
+    for (const z of railZs) {
+      const pts = [Roof.roofPoint(xMin, z, 0.1), Roof.roofPoint(xMax, z, 0.1)];
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      grp.add(new THREE.Line(geo, lineMat));
+    }
+
+    // Linhas V
+    for (const x of railXs) {
+      const pts = [Roof.roofPoint(x, zMin, 0.1), Roof.roofPoint(x, zMax, 0.1)];
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      grp.add(new THREE.Line(geo, lineMat));
+    }
+  }
+
+  /* ── Textura canvas dos painéis ── */
+  static #panelMat() {
+    const c = document.createElement('canvas');
+    c.width = 512; c.height = 512;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#101828';
+    ctx.fillRect(0, 0, 512, 512);
+    const COLS = 6, ROWS = 6;
+    const cw = 512 / COLS - 3, ch = 512 / ROWS - 3;
+    for (let r = 0; r < ROWS; r++) {
+      for (let col = 0; col < COLS; col++) {
+        const cx = col * (512 / COLS) + 1.5;
+        const cy = r   * (512 / ROWS) + 1.5;
+        const g = ctx.createLinearGradient(cx, cy, cx + cw, cy + ch);
+        g.addColorStop(0,   '#1e3464');
+        g.addColorStop(0.5, '#162a58');
+        g.addColorStop(1,   '#0e1e44');
+        ctx.fillStyle = g;
+        ctx.fillRect(cx, cy, cw, ch);
+        ctx.strokeStyle = '#0a1020';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(cx, cy, cw, ch);
+      }
+    }
+    ctx.strokeStyle = 'rgba(60,90,140,0.9)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(1, 1, 510, 510);
+    return new THREE.MeshStandardMaterial({
+      map:       new THREE.CanvasTexture(c),
+      roughness: 0.12,
+      metalness: 0.52,
+      side:      THREE.DoubleSide,
+    });
+  }
+
+  constructor(grp) {
+    for (const side of [-1, 1]) {
+      this.#buildRails(grp, side);
+      this.#buildPanels(grp, side);
+      if (SolarRoofSystem.#DEBUG) this.#buildDebug(grp, side);
+    }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
    HouseBuilder — orquestra todos os módulos da casa
    ───────────────────────────────────────────────────────────────────── */
 class HouseBuilder {
@@ -795,6 +1028,7 @@ class HouseBuilder {
     new Chimney(this.#grp);
     new Garden(this.#grp);
     new Pole(this.#grp);
+    new SolarRoofSystem(this.#grp);
   }
 }
 
