@@ -774,12 +774,22 @@ class Pole {
 
 /* ─────────────────────────────────────────────────────────────────────
    RackingStructure — trilhos e longarinas de alumínio no telhado (água esq.)
-   3 trilhos horizontais (paralelos ao eixo Z) + 4 longarinas (ao longo do slope)
-   meshes[]: 7 Mesh, invisíveis inicialmente, revelados pelo AnimationSequencer
+   A normal do telhado esquerdo aponta para cima-esquerda (nx<0, ny>0).
+   Cada barra é posicionada na superfície via Roof.roofPoint e fica ACIMA
+   do telhado ao longo da normal. A animação de queda usa a normal para
+   que a barra despenque perpendicularmente à superfície.
+   meshes[]: 7 Mesh + userData.restPos(Vector3) + userData.normal(Vector3)
    ───────────────────────────────────────────────────────────────────── */
 class RackingStructure {
   #grp;
   meshes = [];
+
+  /* Normal unitária do plano da água esquerda (X < 0) */
+  static get slopeNormal() {
+    const { RA, W } = CASA;
+    const slope = Math.atan2(RA, W / 2);
+    return new THREE.Vector3(Math.sin(slope), Math.cos(slope), 0).normalize();
+  }
 
   constructor(parentGrp) {
     this.#grp = new THREE.Group();
@@ -795,9 +805,10 @@ class RackingStructure {
       new THREE.CylinderGeometry(radius, radius, len, 6),
       mat
     );
-    mesh.position.addVectors(p1, p2).multiplyScalar(0.5);
+    const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+    mesh.position.copy(mid);
     const q = new THREE.Quaternion();
-    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.divideScalar(len));
+    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().divideScalar(len));
     mesh.quaternion.copy(q);
     mesh.castShadow = true;
     return mesh;
@@ -805,26 +816,32 @@ class RackingStructure {
 
   #build() {
     const { W, D, EV } = CASA;
-    const mat = MaterialLibrary.aluminio();
-    const R   = 0.022;
+    const mat  = MaterialLibrary.aluminio();
+    const R    = 0.025;
+    const norm = RackingStructure.slopeNormal;
+    const LIFT = 0.06; // distância acima da superfície (ao longo da normal)
 
-    // 3 trilhos horizontais — paralelos ao eixo Z, em 3 alturas do slope
+    // 3 trilhos horizontais — paralelos ao eixo Z, numa posição X fixa do slope
     for (const x of [-W * 0.14, -W * 0.28, -W * 0.42]) {
-      const p1 = Roof.roofPoint(x, -(D / 2 + EV * 0.75), 0.06);
-      const p2 = Roof.roofPoint(x,  (D / 2 + EV * 0.75), 0.06);
+      const p1 = Roof.roofPoint(x, -(D / 2 - EV * 0.1), LIFT);
+      const p2 = Roof.roofPoint(x,  (D / 2 - EV * 0.1), LIFT);
       const m  = RackingStructure.#cylFromPoints(p1, p2, R, mat);
-      m.userData.restY = m.position.y;
+      const restPos = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+      m.userData.restPos = restPos.clone();
+      m.userData.normal  = norm.clone();
       m.visible = false;
       this.#grp.add(m);
       this.meshes.push(m);
     }
 
-    // 4 longarinas — descem o slope, de near cumeeira a near beiral
-    for (const z of [-D * 0.37, -D * 0.12, D * 0.12, D * 0.37]) {
-      const p1 = Roof.roofPoint(-W * 0.04, z, 0.06);
-      const p2 = Roof.roofPoint(-W * 0.46, z, 0.06);
+    // 4 longarinas — descem o slope (de cumeeira ao beiral) ao longo de X, em Z fixo
+    for (const z of [-D * 0.35, -D * 0.12, D * 0.12, D * 0.35]) {
+      const p1 = Roof.roofPoint(-W * 0.05, z, LIFT);
+      const p2 = Roof.roofPoint(-W * 0.45, z, LIFT);
       const m  = RackingStructure.#cylFromPoints(p1, p2, R, mat);
-      m.userData.restY = m.position.y;
+      const restPos = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+      m.userData.restPos = restPos.clone();
+      m.userData.normal  = norm.clone();
       m.visible = false;
       this.#grp.add(m);
       this.meshes.push(m);
@@ -889,8 +906,10 @@ class Inverter {
 
 /* ─────────────────────────────────────────────────────────────────────
    SolarPanelArray — 12 painéis fotovoltaicos na água esquerda do telhado
-   Layout: 3 fileiras (slope) × 4 colunas (ridge)
-   panels[]: 12 Mesh, invisíveis inicialmente; cada um tem userData.frame
+   Layout: 4 colunas (eixo Z) × 3 fileiras (desce o slope, eixo X)
+   Cada painel é um PlaneGeometry alinhado ao plano inclinado usando
+   Object3D.lookAt para que a face normal coincida com a normal do telhado.
+   userData.restPos e userData.normal são usados pela animação.
    ───────────────────────────────────────────────────────────────────── */
 class SolarPanelArray {
   #grp;
@@ -904,42 +923,50 @@ class SolarPanelArray {
 
   #build() {
     const { W, D, RA } = CASA;
-    const slopeAngle = Math.atan2(RA, W / 2);
-    const panelMat   = SolarPanelArray.#panelMat();
-    const frameMat   = MaterialLibrary.aluminio();
+    const slope     = Math.atan2(RA, W / 2);
+    // Normal unitária da água esquerda (aponta para fora = para cima e para esquerda)
+    const norm      = RackingStructure.slopeNormal;
+    const panelMat  = SolarPanelArray.#panelMat();
+    const frameMat  = MaterialLibrary.aluminio();
+    const LIFT      = 0.16; // deslocamento acima da superfície ao longo da normal
+    const DROP_DIST = 5.0;  // distância inicial acima da posição final (animação)
 
-    // 3 fileiras ao longo do slope (do cumeeira para o beiral)
-    const xRows = [-W * 0.14, -W * 0.28, -W * 0.42];
-    // 4 colunas ao longo da cumeeira
-    const zCols = [-D * 0.37, -D * 0.12, D * 0.12, D * 0.37];
+    // 3 fileiras ao longo do slope (X decresce: cumeeira → beiral)
+    const xRows = [-W * 0.13, -W * 0.27, -W * 0.41];
+    // 4 colunas ao longo de Z
+    const zCols = [-D * 0.35, -D * 0.12, D * 0.12, D * 0.35];
 
     for (const x of xRows) {
       for (const z of zCols) {
-        const pos = Roof.roofPoint(x, z, 0.14);
+        const restPos = Roof.roofPoint(x, z, LIFT);
 
-        // Moldura de alumínio (ligeiramente maior)
+        // Moldura de alumínio
         const frame = new THREE.Mesh(
-          new THREE.BoxGeometry(1.12, 0.05, 1.76),
+          new THREE.BoxGeometry(0.04, 1.1, 1.72),
           frameMat
         );
-        frame.position.copy(pos);
-        frame.rotation.z    = -slopeAngle;
-        frame.userData.restY = pos.y;
-        frame.visible        = false;
-        frame.castShadow     = true;
+        // Alinha a face da moldura à normal do telhado:
+        // lookAt aponta o eixo +Z local para a direção da normal
+        frame.position.copy(restPos);
+        frame.lookAt(restPos.clone().add(norm));
+        frame.userData.restPos  = restPos.clone();
+        frame.userData.normal   = norm.clone();
+        frame.visible           = false;
+        frame.castShadow        = true;
         this.#grp.add(frame);
 
-        // Painel solar
+        // Painel solar (face alinhada ao telhado)
         const panel = new THREE.Mesh(
-          new THREE.BoxGeometry(1.08, 0.04, 1.72),
+          new THREE.PlaneGeometry(1.06, 1.68),
           panelMat
         );
-        panel.position.copy(pos);
-        panel.rotation.z     = -slopeAngle;
-        panel.userData.restY  = pos.y;
-        panel.userData.frame  = frame;
-        panel.visible         = false;
-        panel.castShadow      = true;
+        panel.position.copy(restPos);
+        panel.lookAt(restPos.clone().add(norm));
+        panel.userData.restPos  = restPos.clone();
+        panel.userData.normal   = norm.clone();
+        panel.userData.frame    = frame;
+        panel.visible           = false;
+        panel.castShadow        = true;
         this.#grp.add(panel);
         this.panels.push(panel);
       }
@@ -1082,18 +1109,26 @@ class AnimationSequencer {
   }
 
   #stepRacking(lt) {
-    const meshes = this.#racking.meshes;
-    const count  = Math.min(Math.floor(lt / 1.1) + 1, meshes.length);
+    const meshes  = this.#racking.meshes;
+    const count   = Math.min(Math.floor(lt / 1.1) + 1, meshes.length);
     for (let i = 0; i < meshes.length; i++) {
       const m = meshes[i];
       if (i >= count) continue;
       m.visible = true;
       const barT = lt - i * 1.1;
-      if (barT < 0.55) {
-        const f = AnimationSequencer.easeOutBounce(barT / 0.55);
-        m.position.y = m.userData.restY + (1 - f) * 4.0;
+      if (barT < 0.6) {
+        // Queda ao longo da normal do telhado: desloca na direção oposta à normal
+        const f      = AnimationSequencer.easeOutBounce(barT / 0.6);
+        const offset = (1 - f) * 4.0;  // distância acima da posição final ao longo da normal
+        const n      = m.userData.normal;
+        const rp     = m.userData.restPos;
+        m.position.set(
+          rp.x + n.x * offset,
+          rp.y + n.y * offset,
+          rp.z + n.z * offset
+        );
       } else {
-        m.position.y = m.userData.restY;
+        m.position.copy(m.userData.restPos);
       }
     }
   }
@@ -1115,26 +1150,35 @@ class AnimationSequencer {
   }
 
   #stepPanels(lt) {
-    const panels = this.#panels.panels;
-    const count  = Math.min(Math.floor(lt / 1.0) + 1, panels.length);
+    const panels  = this.#panels.panels;
+    const count   = Math.min(Math.floor(lt / 1.0) + 1, panels.length);
     for (let i = 0; i < panels.length; i++) {
       const p = panels[i];
       if (i >= count) continue;
       p.visible = true;
       if (p.userData.frame) p.userData.frame.visible = true;
       const pT = lt - i * 1.0;
-      if (pT < 0.55) {
-        const f    = AnimationSequencer.easeOutBounce(pT / 0.55);
-        const drop = (1 - f) * 4.5;
-        p.position.y = p.userData.restY + drop;
+      if (pT < 0.6) {
+        // Queda ao longo da normal: painel desce perpendicularmente ao telhado
+        const f      = AnimationSequencer.easeOutBounce(pT / 0.6);
+        const offset = (1 - f) * 5.0;
+        const n      = p.userData.normal;
+        const rp     = p.userData.restPos;
+        const nx = rp.x + n.x * offset;
+        const ny = rp.y + n.y * offset;
+        const nz = rp.z + n.z * offset;
+        p.position.set(nx, ny, nz);
         if (p.userData.frame) {
-          p.userData.frame.position.y = p.userData.frame.userData.restY + drop;
+          const frp = p.userData.frame.userData.restPos;
+          p.userData.frame.position.set(
+            frp.x + n.x * offset,
+            frp.y + n.y * offset,
+            frp.z + n.z * offset
+          );
         }
       } else {
-        p.position.y = p.userData.restY;
-        if (p.userData.frame) {
-          p.userData.frame.position.y = p.userData.frame.userData.restY;
-        }
+        p.position.copy(p.userData.restPos);
+        if (p.userData.frame) p.userData.frame.position.copy(p.userData.frame.userData.restPos);
       }
     }
   }
@@ -1143,8 +1187,8 @@ class AnimationSequencer {
     this.#elapsed = 0;
     this.#phase   = 0;
     for (const m of this.#racking.meshes) {
-      m.visible    = false;
-      m.position.y = m.userData.restY;
+      m.visible = false;
+      m.position.copy(m.userData.restPos);
     }
     this.#inverter.mesh.visible = false;
     if (this.#inverter.mesh.userData.led) {
@@ -1153,11 +1197,11 @@ class AnimationSequencer {
     this.#inverter.cable1.visible = false;
     this.#inverter.cable1.geometry.setDrawRange(0, 0);
     for (const p of this.#panels.panels) {
-      p.visible    = false;
-      p.position.y = p.userData.restY;
+      p.visible = false;
+      p.position.copy(p.userData.restPos);
       if (p.userData.frame) {
-        p.userData.frame.visible    = false;
-        p.userData.frame.position.y = p.userData.frame.userData.restY;
+        p.userData.frame.visible = false;
+        p.userData.frame.position.copy(p.userData.frame.userData.restPos);
       }
     }
   }
