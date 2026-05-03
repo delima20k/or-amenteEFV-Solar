@@ -649,9 +649,10 @@ class CalculadoraController {
 /* ===================================================
    INSTALAÇÃO PWA (banner "Adicionar à tela inicial")
    Comportamento:
-     - Aparece no TOPO a cada nova sessão (sem memória de dismiss)
+     - Aparece no TOPO IMEDIATAMENTE a cada nova sessão
+     - Botão ✕ fecha só na sessão atual; volta na próxima visita
      - Desaparece permanentemente apenas quando o app for instalado
-     - Botão ✕ fecha só na sessão atual; próxima visita exibe novamente
+     - Se o browser não suportar beforeinstallprompt: exibe instrução manual
    =================================================== */
 class PwaInstallController {
   static #INSTALLED_KEY = 'efv_pwa_installed';
@@ -668,16 +669,19 @@ class PwaInstallController {
   }
 
   #bind() {
-    /* Não mostrar se app já instalado (modo standalone ou já instalado antes) */
+    /* Ocultar permanentemente só se o app já estiver instalado */
     const jaInstalado = window.matchMedia('(display-mode: standalone)').matches
       || window.navigator.standalone === true
       || !!localStorage.getItem(PwaInstallController.#INSTALLED_KEY);
     if (jaInstalado) return;
 
+    /* Mostrar banner IMEDIATAMENTE — não aguardar beforeinstallprompt */
+    this.#banner.hidden = false;
+
+    /* Captura o prompt nativo quando disponível */
     window.addEventListener('beforeinstallprompt', e => {
       e.preventDefault();
       this.#deferredPrompt = e;
-      this.#banner.hidden = false;
     });
 
     window.addEventListener('appinstalled', () => {
@@ -685,14 +689,19 @@ class PwaInstallController {
     });
 
     this.#btnInstall.addEventListener('click', async () => {
-      if (!this.#deferredPrompt) return;
-      this.#deferredPrompt.prompt();
-      const { outcome } = await this.#deferredPrompt.userChoice;
-      this.#deferredPrompt = null;
-      if (outcome === 'accepted') {
-        this.#fecharDefinitivo();
+      if (this.#deferredPrompt) {
+        /* Chrome / Edge: usa o prompt nativo */
+        this.#deferredPrompt.prompt();
+        const { outcome } = await this.#deferredPrompt.userChoice;
+        this.#deferredPrompt = null;
+        if (outcome === 'accepted') {
+          this.#fecharDefinitivo();
+        } else {
+          this.#fecharSessao();
+        }
       } else {
-        this.#fecharSessao();
+        /* Safari / Firefox: orienta instalação manual */
+        alert('Para instalar: use o menu do navegador → "Adicionar à tela inicial" ou "Instalar aplicativo".');
       }
     });
 
