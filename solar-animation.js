@@ -1,763 +1,1038 @@
 ﻿'use strict';
 
 /* =====================================================================
-   AnimacaoMontagem â€” Three.js r134 (UMD global THREE)
-   Casa procedural 3D com duas Ã¡guas de telhado.
-   CÃ¢mera tipo drone acompanha a instalaÃ§Ã£o dos painÃ©is solares.
-
-   EstÃ¡gios:
-     0  Drone posiciona sobre Ã¡gua 1                  (1500 ms)
-     1  Trilhos surgem na Ã¡gua 1                      (1200 ms)
-     2  Cabo cresce painÃ©is â†’ inversor                (800  ms)
-     3  Inversor cai na parede                        (600  ms)
-     4  PainÃ©is caem em cascata â€” Ã¡gua 1              (2000 ms)
-     5  Glow â€” PointLight pulsa                       (1000 ms)
-     6  Pan cÃ¢mera para Ã¡gua 2                        (1800 ms)
-     7  InstalaÃ§Ã£o completa Ã¡gua 2                    (5200 ms)
-     8  CÃ¢mera segue fio descendo                     (1400 ms)
-     9  Quadro elÃ©trico aparece                       (800  ms)
-    10  Disjuntor â†’ janelas + poste ON                (900  ms)
-    11  Ã“rbita final (loop)                           (âˆž)
+   AnimacaoMontagem — Three.js r134
+   Arquitetura: SceneManager · CameraController · ModelLoader · AnimationController
+   API pública: constructor(canvas) · iniciar() · reiniciar() · parar()
    ===================================================================== */
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-   MaterialFactory â€” texturas procedurais via Canvas
-   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-class MaterialFactory {
-  static #tex(w, h, fn) {
+/* ─────────────────────────────────────────────────────────────────────
+   CONSTANTES GLOBAIS DA CENA
+   ───────────────────────────────────────────────────────────────────── */
+const CASA = Object.freeze({
+  W:  7,     // largura (X)
+  D:  10,    // profundidade (Z)
+  H:  3.8,   // altura das paredes
+  RA: 2.2,   // altura do telhado (ridge)
+  FH: 0.5,   // fundação
+  EV: 0.45,  // beiral
+});
+
+/* ─────────────────────────────────────────────────────────────────────
+   MaterialLibrary — texturas PBR procedurais (Canvas 2D)
+   ───────────────────────────────────────────────────────────────────── */
+class MaterialLibrary {
+  static #cache = new Map();
+
+  static #tex(key, w, h, fn) {
+    if (MaterialLibrary.#cache.has(key)) return MaterialLibrary.#cache.get(key);
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     fn(c.getContext('2d'), w, h);
     const t = new THREE.CanvasTexture(c);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    MaterialLibrary.#cache.set(key, t);
     return t;
   }
 
   static telha() {
-    const tex = MaterialFactory.#tex(256, 128, (ctx, w, h) => {
-      ctx.fillStyle = '#8B3A2A';
+    const tex = MaterialLibrary.#tex('telha', 512, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#7a2e1a';
       ctx.fillRect(0, 0, w, h);
-      const rows = 5, tileW = w / 4, tileH = h / rows;
+      const cols = 6, rows = 8;
+      const tW = w / cols, tH = h / rows;
       for (let r = 0; r < rows; r++) {
-        const offset = (r % 2) * (tileW / 2);
-        for (let c = 0; c < 6; c++) {
-          const x = c * tileW - offset, y = r * tileH;
-          const grad = ctx.createLinearGradient(x, y, x, y + tileH);
-          grad.addColorStop(0, '#C8502A');
-          grad.addColorStop(0.4, '#A83820');
-          grad.addColorStop(1, '#7A2A18');
-          ctx.fillStyle = grad;
+        const off = (r % 2) * (tW * 0.5);
+        for (let c = 0; c < cols + 1; c++) {
+          const x = c * tW - off, y = r * tH;
+          const hue = 10 + (Math.sin(r * 7 + c * 13) * 5);
+          const lit = 28 + (Math.sin(r * 3 + c * 11) * 6);
+          const g = ctx.createLinearGradient(x, y, x, y + tH);
+          g.addColorStop(0,    `hsl(${hue},65%,${lit + 12}%)`);
+          g.addColorStop(0.45, `hsl(${hue},60%,${lit}%)`);
+          g.addColorStop(1,    `hsl(${hue},55%,${lit - 8}%)`);
+          ctx.fillStyle = g;
           ctx.beginPath();
-          ctx.ellipse(x + tileW / 2, y + tileH * 0.6, tileW * 0.48, tileH * 0.52, 0, 0, Math.PI * 2);
+          ctx.ellipse(x + tW * 0.5, y + tH * 0.62, tW * 0.46, tH * 0.54, 0, 0, Math.PI * 2);
           ctx.fill();
-          ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+          ctx.lineWidth = 1.2;
           ctx.stroke();
         }
       }
     });
-    tex.repeat.set(4, 3);
-    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0.05 });
+    tex.repeat.set(6, 4);
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.82, metalness: 0.04 });
   }
 
-  static tijolo() {
-    const tex = MaterialFactory.#tex(256, 128, (ctx, w, h) => {
-      ctx.fillStyle = '#b5552a';
+  static reboco() {
+    const tex = MaterialLibrary.#tex('reboco', 512, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#e8e0d2';
       ctx.fillRect(0, 0, w, h);
-      const bW = 64, bH = 32;
-      for (let row = 0; row * bH < h + bH; row++) {
-        const off = (row % 2) * (bW / 2);
-        for (let col = -1; col * bW < w + bW; col++) {
-          const x = col * bW + off, y = row * bH;
-          ctx.fillStyle = `hsl(${15 + Math.random() * 10},55%,${38 + Math.random() * 8}%)`;
-          ctx.fillRect(x + 2, y + 2, bW - 4, bH - 4);
-        }
-      }
-      ctx.strokeStyle = '#8B6050'; ctx.lineWidth = 2;
-      for (let y = 0; y < h; y += bH) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
-      for (let row = 0; row * bH < h; row++) {
-        const off = (row % 2) * (bW / 2);
-        for (let x = off; x < w + bW; x += bW) { ctx.beginPath(); ctx.moveTo(x, row * bH); ctx.lineTo(x, (row + 1) * bH); ctx.stroke(); }
+      for (let i = 0; i < 4000; i++) {
+        const x = Math.random() * w, y = Math.random() * h;
+        const r = Math.random() * 2.5;
+        const v = Math.random() * 20 - 10;
+        ctx.fillStyle = `rgba(${140 + v | 0},${130 + v | 0},${115 + v | 0},0.18)`;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
       }
     });
-    tex.repeat.set(3, 2);
-    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, metalness: 0.0 });
+    tex.repeat.set(3, 3);
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92, metalness: 0.0 });
   }
 
   static painel() {
-    const tex = MaterialFactory.#tex(256, 160, (ctx, w, h) => {
-      ctx.fillStyle = '#0d1b3e'; ctx.fillRect(0, 0, w, h);
-      const cols = 6, rows = 4;
-      const cw = (w - 16) / cols, ch = (h - 16) / rows;
+    const tex = MaterialLibrary.#tex('painel', 512, 320, (ctx, w, h) => {
+      const bg = ctx.createLinearGradient(0, 0, w, h);
+      bg.addColorStop(0, '#0a1628');
+      bg.addColorStop(1, '#0d1f3c');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, w, h);
+      const cols = 8, rows = 5;
+      const cW = (w - 20) / cols, cH = (h - 20) / rows;
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-          const x = 8 + c * cw, y = 8 + r * ch;
-          ctx.fillStyle = '#11234d'; ctx.fillRect(x + 1, y + 1, cw - 2, ch - 2);
-          const shine = ctx.createLinearGradient(x, y, x + cw, y + ch);
-          shine.addColorStop(0, 'rgba(120,200,255,0.12)'); shine.addColorStop(1, 'rgba(0,0,0,0)');
-          ctx.fillStyle = shine; ctx.fillRect(x + 1, y + 1, cw - 2, ch - 2);
+          const x = 10 + c * cW, y = 10 + r * cH;
+          const cellBg = ctx.createLinearGradient(x, y, x + cW, y + cH);
+          cellBg.addColorStop(0, '#0f2248');
+          cellBg.addColorStop(1, '#0a1830');
+          ctx.fillStyle = cellBg;
+          ctx.fillRect(x + 1.5, y + 1.5, cW - 3, cH - 3);
+          const shine = ctx.createLinearGradient(x, y, x + cW * 0.6, y + cH * 0.6);
+          shine.addColorStop(0, 'rgba(100,200,255,0.10)');
+          shine.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = shine;
+          ctx.fillRect(x + 1.5, y + 1.5, cW - 3, cH - 3);
         }
       }
-      ctx.strokeStyle = '#1a3a70'; ctx.lineWidth = 2; ctx.strokeRect(4, 4, w - 8, h - 8);
+      ctx.strokeStyle = '#8899aa';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(3, 3, w - 6, h - 6);
     });
-    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.3, metalness: 0.6, color: 0x1a2a5e });
+    return new THREE.MeshStandardMaterial({
+      map: tex, roughness: 0.25, metalness: 0.65, color: 0x182844,
+    });
   }
 
-  static metal() {
-    return new THREE.MeshStandardMaterial({ color: 0xaabbcc, roughness: 0.2, metalness: 0.9 });
+  static painelEmissivo() {
+    const m = MaterialLibrary.painel();
+    m.emissive = new THREE.Color(0x1a3a88);
+    m.emissiveIntensity = 0.0;
+    return m;
   }
 
-  static metalEscuro() {
-    return new THREE.MeshStandardMaterial({ color: 0x667788, roughness: 0.3, metalness: 0.85 });
-  }
+  static metal()      { return new THREE.MeshStandardMaterial({ color: 0xb0c0d0, roughness: 0.18, metalness: 0.92 }); }
+  static metalEscuro(){ return new THREE.MeshStandardMaterial({ color: 0x556677, roughness: 0.28, metalness: 0.88 }); }
+  static aluminio()   { return new THREE.MeshStandardMaterial({ color: 0xd0d8e0, roughness: 0.15, metalness: 0.95 }); }
+  static inversor()   { return new THREE.MeshStandardMaterial({ color: 0x1e2e1e, roughness: 0.45, metalness: 0.5  }); }
+  static cabo()       { return new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.72, metalness: 0.15 }); }
 
   static relva() {
-    const tex = MaterialFactory.#tex(256, 256, (ctx, w, h) => {
-      ctx.fillStyle = '#3a6b28'; ctx.fillRect(0, 0, w, h);
-      for (let i = 0; i < 600; i++) {
+    const tex = MaterialLibrary.#tex('relva', 512, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#2f5a1e';
+      ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 8000; i++) {
         const x = Math.random() * w, y = Math.random() * h;
-        ctx.fillStyle = `hsl(${100 + Math.random() * 30},${45 + Math.random() * 20}%,${25 + Math.random() * 15}%)`;
-        ctx.fillRect(x, y, 3, 3);
+        const hue = 95 + Math.random() * 35;
+        const sat = 40 + Math.random() * 25;
+        const lit = 18 + Math.random() * 18;
+        ctx.fillStyle = `hsl(${hue},${sat}%,${lit}%)`;
+        ctx.fillRect(x, y, 2.5, 2.5);
       }
     });
-    tex.repeat.set(8, 8);
+    tex.repeat.set(12, 12);
     return new THREE.MeshStandardMaterial({ map: tex, roughness: 1.0, metalness: 0.0 });
   }
 
-  static parede() {
-    return new THREE.MeshStandardMaterial({ color: 0xF5F0E8, roughness: 0.85, metalness: 0.0 });
+  static calcada() {
+    const tex = MaterialLibrary.#tex('calcada', 256, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#c8bfb0';
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#a89880';
+      ctx.lineWidth = 2;
+      for (let x = 0; x < w; x += 48) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+      for (let y = 0; y < h; y += 48) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+    });
+    tex.repeat.set(4, 4);
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, metalness: 0.0 });
   }
 
   static vidro() {
-    return new THREE.MeshStandardMaterial({ color: 0x88bbdd, roughness: 0.1, metalness: 0.1,
-      transparent: true, opacity: 0.55 });
+    return new THREE.MeshStandardMaterial({
+      color: 0x88ccee, roughness: 0.04, metalness: 0.05,
+      transparent: true, opacity: 0.45,
+    });
   }
 
   static madeira() {
-    return new THREE.MeshStandardMaterial({ color: 0x8B5E3C, roughness: 0.8, metalness: 0.0 });
-  }
-
-  static inversor() {
-    return new THREE.MeshStandardMaterial({ color: 0x2a3a2a, roughness: 0.5, metalness: 0.4 });
-  }
-
-  static cabo() {
-    return new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.7, metalness: 0.2 });
+    const tex = MaterialLibrary.#tex('madeira', 256, 256, (ctx, w, h) => {
+      for (let y = 0; y < h; y++) {
+        const hue = 22 + Math.sin(y * 0.15) * 4;
+        const lit = 22 + Math.sin(y * 0.08) * 6;
+        ctx.fillStyle = `hsl(${hue},50%,${lit}%)`;
+        ctx.fillRect(0, y, w, 1);
+      }
+    });
+    tex.repeat.set(2, 3);
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.78, metalness: 0.0 });
   }
 
   static concreto() {
-    return new THREE.MeshStandardMaterial({ color: 0xccbfb0, roughness: 0.95, metalness: 0.0 });
+    const tex = MaterialLibrary.#tex('concreto', 256, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#c0b8a8';
+      ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 2000; i++) {
+        const x = Math.random() * w, y = Math.random() * h;
+        const v = Math.random() * 30 - 15;
+        ctx.fillStyle = `rgba(${140 + v | 0},${132 + v | 0},${118 + v | 0},0.2)`;
+        ctx.fillRect(x, y, 3, 3);
+      }
+    });
+    tex.repeat.set(2, 2);
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.94, metalness: 0.0 });
+  }
+
+  static dispose() {
+    for (const t of MaterialLibrary.#cache.values()) t.dispose();
+    MaterialLibrary.#cache.clear();
   }
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-   CenarioBuilder â€” monta casa e ambiente 3D
-   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-class CenarioBuilder {
+/* ─────────────────────────────────────────────────────────────────────
+   HouseBuilder — monta casa 3D realista
+   ───────────────────────────────────────────────────────────────────── */
+class HouseBuilder {
   #scene;
+  #group;
 
-  /* ReferÃªncias para o CameraRig e SolarArrayBuilder */
-  roof1Mid   = new THREE.Vector3();
-  roof2Mid   = new THREE.Vector3();
-  quadroPos  = new THREE.Vector3();
-  poleTop    = new THREE.Vector3();
-
-  luzJanela1 = null;
-  luzJanela2 = null;
-  luzPoste   = null;
-
-  static CW = 6;
-  static CD = 8;
-  static CH = 3.5;
-  static RA = 1.8;
+  roof1Center = new THREE.Vector3();
+  roof2Center = new THREE.Vector3();
+  quadroPos   = new THREE.Vector3();
+  poleTop     = new THREE.Vector3();
+  luzJanela1  = null;
+  luzJanela2  = null;
+  luzPoste    = null;
 
   constructor(scene) {
     this.#scene = scene;
+    this.#group = new THREE.Group();
+    scene.add(this.#group);
   }
 
-  construir() {
+  build() {
     this.#solo();
     this.#fundacao();
     this.#paredes();
     this.#telhado();
+    this.#beiral();
     this.#aberturas();
+    this.#chamine();
     this.#jardim();
     this.#poste();
-    this.#quadro();
+    this.#quadroEletrico();
     this.#luzes();
-
-    const { CW, CD, CH, RA } = CenarioBuilder;
-    this.roof1Mid.set(0, CH + RA * 0.5, -CD * 0.25);
-    this.roof2Mid.set(0, CH + RA * 0.5,  CD * 0.25);
-    this.quadroPos.set(CW / 2 - 0.05, CH * 0.5, CD * 0.3);
-    this.poleTop.set(CW / 2 + 4, 5.5, -CD * 0.5);
+    this.#calcularRefs();
   }
 
   #solo() {
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), MaterialFactory.relva());
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.receiveShadow = true;
-    this.#scene.add(mesh);
+    const g = new THREE.Group();
+    const campo = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), MaterialLibrary.relva());
+    campo.rotation.x = -Math.PI / 2;
+    campo.receiveShadow = true;
+    g.add(campo);
+    const calc = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.08, 6), MaterialLibrary.calcada());
+    calc.position.set(0, 0.04, -CASA.D / 2 - 3.5);
+    calc.receiveShadow = true;
+    g.add(calc);
+    this.#group.add(g);
   }
 
   #fundacao() {
-    const { CW, CD } = CenarioBuilder;
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(CW + 0.3, 0.4, CD + 0.3), MaterialFactory.concreto());
-    mesh.position.y = 0.2;
-    mesh.receiveShadow = true;
-    this.#scene.add(mesh);
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(CASA.W + 0.4, CASA.FH, CASA.D + 0.4),
+      MaterialLibrary.concreto()
+    );
+    m.position.y = CASA.FH / 2;
+    m.castShadow = m.receiveShadow = true;
+    this.#group.add(m);
   }
 
   #paredes() {
-    const { CW, CD, CH, RA } = CenarioBuilder;
-    const base = CH / 2 + 0.4;
-    const mat  = MaterialFactory.parede();
+    const mat  = MaterialLibrary.reboco();
+    const yMid = CASA.FH + CASA.H / 2;
+    const T    = 0.28;
+    const { W, H, D, FH, RA } = CASA;
 
-    const defs = [
-      { w: CW, h: CH, d: 0.25, x: 0,       y: base, z: -CD / 2 },
-      { w: CW, h: CH, d: 0.25, x: 0,       y: base, z:  CD / 2 },
-      { w: 0.25, h: CH, d: CD, x: -CW / 2, y: base, z: 0 },
-      { w: 0.25, h: CH, d: CD, x:  CW / 2, y: base, z: 0 },
-    ];
-
-    for (const def of defs) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(def.w, def.h, def.d), mat);
-      m.position.set(def.x, def.y, def.z);
+    for (const [w, h, d, x, y, z] of [
+      [W, H, T,  0,       yMid, -D / 2],
+      [W, H, T,  0,       yMid,  D / 2],
+      [T, H, D, -W / 2,   yMid,  0],
+      [T, H, D,  W / 2,   yMid,  0],
+    ]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      m.position.set(x, y, z);
       m.castShadow = m.receiveShadow = true;
-      this.#scene.add(m);
+      this.#group.add(m);
     }
 
-    /* Gables triangulares */
-    for (const zPos of [-CD / 2, CD / 2]) {
+    /* gables triangulares com extrusão */
+    for (const [zPos, ry] of [[-D / 2, 0], [D / 2, Math.PI]]) {
       const shape = new THREE.Shape();
-      shape.moveTo(-CW / 2, 0); shape.lineTo(CW / 2, 0); shape.lineTo(0, RA); shape.closePath();
-      const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), mat);
-      m.position.set(0, CH + 0.4, zPos);
+      shape.moveTo(-W / 2, 0);
+      shape.lineTo( W / 2, 0);
+      shape.lineTo(0, RA);
+      shape.closePath();
+      const geo = new THREE.ExtrudeGeometry(shape, { depth: T, bevelEnabled: false });
+      const m   = new THREE.Mesh(geo, mat);
+      m.position.set(0, FH + H, zPos - (ry ? -T : 0));
+      m.rotation.y = ry;
       m.castShadow = true;
-      this.#scene.add(m);
+      this.#group.add(m);
     }
   }
 
   #telhado() {
-    const { CW, CD, CH, RA } = CenarioBuilder;
-    const yBase = CH + 0.4;
-    const slope = Math.atan2(RA, CD / 2);
-    const len   = Math.sqrt((CD / 2) ** 2 + RA ** 2) + 0.2;
-    const mat   = MaterialFactory.telha();
+    const { W, D, H, FH, RA, EV } = CASA;
+    const mat    = MaterialLibrary.telha();
+    const slope  = Math.atan2(RA, D / 2);
+    const sLen   = Math.hypot(RA, D / 2) + EV + 0.1;
 
     for (const sign of [-1, 1]) {
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(CW + 0.3, len, 1, 6), mat);
-      mesh.rotation.x = sign * slope - Math.PI / 2;
-      mesh.position.set(0, yBase + RA / 2, sign * (-CD / 4));
-      mesh.castShadow = mesh.receiveShadow = true;
-      this.#scene.add(mesh);
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(W + EV * 2, sLen, 1, 8),
+        mat
+      );
+      m.rotation.x = sign * slope - Math.PI / 2;
+      m.position.set(0, FH + H + RA / 2, sign * (D / 4 + EV * 0.3));
+      m.castShadow = m.receiveShadow = true;
+      this.#group.add(m);
     }
 
-    /* Cumeeira */
-    const k = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, CD + 0.3, 8), MaterialFactory.metalEscuro());
-    k.rotation.x = Math.PI / 2;
-    k.position.set(0, yBase + RA, 0);
-    k.castShadow = true;
-    this.#scene.add(k);
+    const ridge = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.055, 0.055, D + EV * 2, 8),
+      MaterialLibrary.metalEscuro()
+    );
+    ridge.rotation.x = Math.PI / 2;
+    ridge.position.set(0, FH + H + RA, 0);
+    ridge.castShadow = true;
+    this.#group.add(ridge);
+  }
+
+  #beiral() {
+    const { W, D, FH, H, EV } = CASA;
+    const mat = MaterialLibrary.concreto();
+    for (const z of [-D / 2, D / 2]) {
+      const b = new THREE.Mesh(
+        new THREE.BoxGeometry(W + EV * 2, 0.08, EV + 0.1),
+        mat
+      );
+      b.position.set(0, FH + H, z + (z < 0 ? -EV * 0.5 : EV * 0.5));
+      b.castShadow = true;
+      this.#group.add(b);
+    }
   }
 
   #aberturas() {
-    const { CW, CD, CH } = CenarioBuilder;
-    const yBase = CH + 0.4;
-    const matJan = MaterialFactory.vidro();
-    const matMad = MaterialFactory.madeira();
+    const { W, D, H, FH } = CASA;
+    const yWall = FH + H / 2;
+    const matV  = MaterialLibrary.vidro();
+    const matM  = MaterialLibrary.madeira();
 
-    /* Janelas */
-    for (const [x, z, ry] of [[-CW / 4, -CD / 2 - 0.01, 0], [CW / 4, -CD / 2 - 0.01, 0], [-CW / 4, CD / 2 + 0.01, Math.PI]]) {
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.0, 0.08), matMad);
-      const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 0.82), matJan);
-      frame.position.set(x, yBase - CH * 0.3, z); frame.rotation.y = ry;
-      glass.position.set(x, yBase - CH * 0.3, z + (ry === 0 ? -0.05 : 0.05)); glass.rotation.y = ry;
-      this.#scene.add(frame, glass);
-    }
+    const janela = (x, z, ry) => {
+      const outer = new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.15, 0.1), matM);
+      outer.position.set(x, yWall + 0.2, z);
+      outer.rotation.y = ry;
+      const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), matV);
+      glass.position.set(x, yWall + 0.2, z + (ry === 0 ? -0.06 : 0.06));
+      glass.rotation.y = ry;
+      const bH = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.04, 0.04), matM);
+      bH.position.copy(glass.position);
+      const bV = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.9, 0.04), matM);
+      bV.position.copy(glass.position);
+      this.#group.add(outer, glass, bH, bV);
+    };
 
-    /* Porta */
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.1, 0.1), matMad);
-    frame.position.set(0, yBase - CH * 0.5 + 1.05 - 0.4, -CD / 2 - 0.01);
-    const door = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.9, 0.06), matMad);
-    door.position.set(0, yBase - CH * 0.5 + 0.95 - 0.4, -CD / 2 - 0.06);
-    this.#scene.add(frame, door);
+    janela(-W / 3, -D / 2 - 0.01, 0);
+    janela( W / 3, -D / 2 - 0.01, 0);
+    janela(-W / 3,  D / 2 + 0.01, Math.PI);
+
+    const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.2, 0.12), matM);
+    doorFrame.position.set(0, FH + 1.1, -D / 2 - 0.02);
+    const door = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.0, 0.06), matM);
+    door.position.set(0.08, FH + 1.0, -D / 2 - 0.08);
+    const step = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.14, 0.45), MaterialLibrary.concreto());
+    step.position.set(0, FH + 0.07, -D / 2 - 0.28);
+    this.#group.add(doorFrame, door, step);
+  }
+
+  #chamine() {
+    const { W, D, FH, H, RA } = CASA;
+    const mat  = MaterialLibrary.concreto();
+    const cx   = W / 4, cz = D / 6;
+    const cH   = H * 0.65 + RA * 0.6;
+    const yBot = FH + H * 0.6;
+
+    const corpo = new THREE.Mesh(new THREE.BoxGeometry(0.55, cH, 0.55), mat);
+    corpo.position.set(cx, yBot + cH / 2, cz);
+    corpo.castShadow = true;
+    this.#group.add(corpo);
+
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.12, 0.72), MaterialLibrary.metalEscuro());
+    cap.position.set(cx, FH + H + RA * 0.9, cz);
+    this.#group.add(cap);
   }
 
   #jardim() {
-    const { CW, CD } = CenarioBuilder;
-    const path = new THREE.Mesh(new THREE.BoxGeometry(2, 0.05, 3), MaterialFactory.concreto());
-    path.position.set(0, 0.42, -CD / 2 - 2);
-    this.#scene.add(path);
+    const { W, D } = CASA;
+    const matB = new THREE.MeshStandardMaterial({ color: 0x2a6018, roughness: 0.9 });
 
-    for (const [x, z] of [[-CW / 2 - 0.5, -CD / 2 - 0.5], [CW / 2 + 0.5, -CD / 2 - 0.5]]) {
-      const bush = new THREE.Mesh(new THREE.SphereGeometry(0.5, 7, 5),
-        new THREE.MeshStandardMaterial({ color: 0x2d6e20, roughness: 0.9 }));
-      bush.position.set(x, 0.8, z); bush.castShadow = true;
-      this.#scene.add(bush);
+    for (const [x, z, r] of [
+      [-W / 2 - 0.6, -D / 2 - 0.6, 0.55],
+      [ W / 2 + 0.6, -D / 2 - 0.6, 0.55],
+      [-W / 2 - 0.5,  D / 2 + 0.4, 0.42],
+    ]) {
+      const bush = new THREE.Mesh(new THREE.SphereGeometry(r, 9, 7), matB);
+      bush.position.set(x, r, z);
+      bush.castShadow = true;
+      this.#group.add(bush);
     }
+
+    /* árvore */
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 2.5, 8), MaterialLibrary.madeira());
+    trunk.position.set(-W / 2 - 2.5, 1.25, -D / 2 + 1);
+    trunk.castShadow = true;
+    this.#group.add(trunk);
+
+    const copa = new THREE.Mesh(
+      new THREE.SphereGeometry(1.3, 9, 7),
+      new THREE.MeshStandardMaterial({ color: 0x1e5c10, roughness: 0.95 })
+    );
+    copa.position.set(-W / 2 - 2.5, 3.3, -D / 2 + 1);
+    copa.castShadow = true;
+    this.#group.add(copa);
   }
 
   #poste() {
-    const { CW, CD } = CenarioBuilder;
-    const px = CW / 2 + 4, pz = -CD * 0.5;
-    const mat = MaterialFactory.metal();
+    const { W, D } = CASA;
+    const px = W / 2 + 5, pz = -D * 0.45;
 
-    const haste = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 6, 8), mat);
-    haste.position.set(px, 3, pz); haste.castShadow = true;
-    this.#scene.add(haste);
+    const haste = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.1, 7, 8), MaterialLibrary.metal());
+    haste.position.set(px, 3.5, pz);
+    haste.castShadow = true;
+    this.#group.add(haste);
 
-    const head = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.12, 0.3, 8),
-      new THREE.MeshStandardMaterial({ color: 0x444444 }));
-    head.position.set(px, 6.15, pz);
-    this.#scene.add(head);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.2, 6), MaterialLibrary.metal());
+    arm.rotation.z = Math.PI / 2;
+    arm.position.set(px - 0.6, 7.15, pz);
+    this.#group.add(arm);
 
-    this.poleTop.set(px, 6.3, pz);
+    const shade = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.22, 0.14, 0.35, 10),
+      new THREE.MeshStandardMaterial({ color: 0x3a3a3a })
+    );
+    shade.position.set(px - 1.2, 7.0, pz);
+    this.#group.add(shade);
 
-    /* Fio do poste atÃ© a casa */
-    const curve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(px, 5.5, pz),
-      new THREE.Vector3(CW / 2 + 1.5, 5.2, pz),
-      new THREE.Vector3(CW / 2, 4.5, 0),
+    this.poleTop.set(px - 1.2, 7.1, pz);
+
+    const wireCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(px, 7, pz),
+      new THREE.Vector3(W / 2 + 2, 6.5, pz * 0.5),
+      new THREE.Vector3(W / 2 + 0.1, 5.5, 0),
     ]);
-    const wire = new THREE.Mesh(new THREE.TubeGeometry(curve, 20, 0.02, 5, false), MaterialFactory.cabo());
-    this.#scene.add(wire);
+    this.#group.add(new THREE.Mesh(
+      new THREE.TubeGeometry(wireCurve, 24, 0.018, 5, false),
+      MaterialLibrary.cabo()
+    ));
   }
 
-  #quadro() {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.12), MaterialFactory.metalEscuro());
-    mesh.position.copy(this.quadroPos);
-    mesh.rotation.y = -Math.PI / 2;
-    mesh.scale.set(0, 0, 0);
-    mesh.name = 'quadro';
-    this.#scene.add(mesh);
+  #quadroEletrico() {
+    const { W, D, FH, H } = CASA;
+    const qx = W / 2 + 0.02, qy = FH + H * 0.45, qz = D * 0.32;
 
-    const btn = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0xcc2222, emissive: 0x330000 }));
-    btn.position.set(this.quadroPos.x - 0.08, this.quadroPos.y, this.quadroPos.z + 0.07);
-    btn.rotation.y = -Math.PI / 2;
-    btn.scale.set(0, 0, 0);
-    btn.name = 'disjuntor';
-    this.#scene.add(btn);
+    const caixa = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.72, 0.15), MaterialLibrary.metalEscuro());
+    caixa.position.set(qx, qy, qz);
+    caixa.rotation.y = -Math.PI / 2;
+    caixa.scale.set(0, 0, 0);
+    caixa.name = 'quadro';
+    this.#group.add(caixa);
+
+    const led = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 0.12, 0.04),
+      new THREE.MeshStandardMaterial({ color: 0x003300, emissive: 0x002200, emissiveIntensity: 0 })
+    );
+    led.position.set(qx - 0.01, qy + 0.15, qz);
+    led.rotation.y = -Math.PI / 2;
+    led.name = 'quadro-led';
+    this.#group.add(led);
+
+    const disj = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.22, 0.08),
+      new THREE.MeshStandardMaterial({ color: 0xdd1111, emissive: 0x330000 })
+    );
+    disj.position.set(qx - 0.01, qy - 0.08, qz + 0.06);
+    disj.rotation.y = -Math.PI / 2;
+    disj.scale.set(0, 0, 0);
+    disj.name = 'disjuntor';
+    this.#group.add(disj);
+
+    this.quadroPos.set(qx, qy, qz);
   }
 
   #luzes() {
-    const { CW, CD, CH } = CenarioBuilder;
+    const { W, D, FH, H } = CASA;
 
-    this.luzJanela1 = new THREE.PointLight(0xFFE4A0, 0, 5);
-    this.luzJanela1.position.set(-CW / 4, CH, -CD / 2 + 0.5);
+    this.luzJanela1 = new THREE.PointLight(0xFFE080, 0, 6);
+    this.luzJanela1.position.set(-W / 3, FH + H * 0.65, -D / 2 + 0.8);
     this.#scene.add(this.luzJanela1);
 
-    this.luzJanela2 = new THREE.PointLight(0xFFE4A0, 0, 5);
-    this.luzJanela2.position.set(CW / 4, CH, -CD / 2 + 0.5);
+    this.luzJanela2 = new THREE.PointLight(0xFFE080, 0, 6);
+    this.luzJanela2.position.set(W / 3, FH + H * 0.65, -D / 2 + 0.8);
     this.#scene.add(this.luzJanela2);
 
-    this.luzPoste = new THREE.SpotLight(0xFFF5CC, 0, 14, Math.PI / 5, 0.4);
+    this.luzPoste = new THREE.SpotLight(0xFFF8CC, 0, 18, Math.PI / 6, 0.35);
     this.luzPoste.position.copy(this.poleTop);
-    this.luzPoste.target.position.set(this.poleTop.x - 2, 0, this.poleTop.z);
+    this.luzPoste.target.position.set(this.poleTop.x - 3, 0, this.poleTop.z);
     this.#scene.add(this.luzPoste, this.luzPoste.target);
+  }
+
+  #calcularRefs() {
+    const { D, FH, H, RA } = CASA;
+    this.roof1Center.set(0, FH + H + RA * 0.45, -D / 4);
+    this.roof2Center.set(0, FH + H + RA * 0.45,  D / 4);
   }
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-   SolarArrayBuilder â€” trilhos, cabo, inversor, painÃ©is por Ã¡gua
-   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-class SolarArrayBuilder {
-  #scene; #side;
-  #paineis  = [];
-  #trilhos  = [];
-  #caboMesh = null;
-  #inversorMesh = null;
-  #caboFio  = null;
+/* ─────────────────────────────────────────────────────────────────────
+   SolarInstaller — trilhos, cabos, inversores e painéis por água
+   ───────────────────────────────────────────────────────────────────── */
+class SolarInstaller {
+  #scene;
+  #side;
+  #group;
 
-  static PAINEIS = 6;
+  #trilhos    = [];
+  #cabos      = [];
+  #inversores = [];
+  #paineis    = [];
+
+  static COLS = 3;
+  static ROWS = 2;
 
   constructor(scene, side) {
     this.#scene = scene;
     this.#side  = side;
+    this.#group = new THREE.Group();
+    scene.add(this.#group);
   }
 
-  #signZ() { return this.#side === 'front' ? -1 : 1; }
+  #sz()    { return this.#side === 'front' ? -1 : 1; }
+  #slope() { return Math.atan2(CASA.RA, CASA.D / 2); }
+  #baseY() { return CASA.FH + CASA.H + CASA.RA * 0.5; }
+  #baseZ() { return this.#sz() * CASA.D / 4; }
 
-  #slopeAngle() {
-    const { CD, RA } = CenarioBuilder;
-    return Math.atan2(RA, CD / 2);
+  build() {
+    this.#buildTrilhos();
+    this.#buildCabos();
+    this.#buildInversores();
+    this.#buildPaineis();
   }
 
-  #basePos() {
-    const { CH, RA, CD } = CenarioBuilder;
-    return { y: CH + 0.4 + RA / 2, z: this.#signZ() * CD / 4 };
-  }
+  #buildTrilhos() {
+    const { W } = CASA;
+    const mat  = MaterialLibrary.aluminio();
+    const cols = SolarInstaller.COLS;
+    const step = (W - 1.2) / (cols - 1);
+    const rLen = CASA.D * 0.38;
 
-  criarTrilhos() {
-    const { CW, CD } = CenarioBuilder;
-    const mat  = MaterialFactory.metal();
-    const { y, z } = this.#basePos();
-    const slope = this.#slopeAngle();
-
-    for (let i = 0; i < 4; i++) {
-      const x = -CW / 2 + 0.8 + i * (CW - 1.6) / 3;
-      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, CD * 0.45, 6), mat);
-      rail.position.set(x, y, z);
-      rail.rotation.x = this.#signZ() * slope;
-      rail.scale.y = 0;
-      rail.castShadow = true;
-      this.#trilhos.push(rail);
-      this.#scene.add(rail);
+    for (let c = 0; c < cols; c++) {
+      const x    = -W / 2 + 0.6 + c * step;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, rLen), mat);
+      mesh.position.set(x, this.#baseY(), this.#baseZ());
+      mesh.rotation.x = this.#sz() * this.#slope();
+      mesh.scale.set(0, 1, 1);
+      mesh.castShadow = true;
+      this.#trilhos.push(mesh);
+      this.#group.add(mesh);
     }
   }
 
-  criarInversor() {
-    const { CW, CH } = CenarioBuilder;
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.6, 0.15), MaterialFactory.inversor());
-    mesh.position.set(CW / 2 - 0.3, CH + 1.5, this.#signZ() * CenarioBuilder.CD * 0.4);
-    mesh.rotation.y = -Math.PI / 2;
-    mesh.scale.y = 0;
-    mesh.name = `inversor-${this.#side}`;
-    this.#inversorMesh = mesh;
-    this.#scene.add(mesh);
+  #buildCabos() {
+    const { W, FH, H } = CASA;
+    const bY = this.#baseY(), bZ = this.#baseZ();
+
+    for (const offset of [-0.08, 0.08]) {
+      const p0 = new THREE.Vector3(-W / 2 + 0.3, bY + offset * 0.3, bZ);
+      const pM = new THREE.Vector3(0,             bY + 0.18,         bZ);
+      const p1 = new THREE.Vector3( W / 2 - 0.3, bY + offset * 0.3, bZ);
+      const curve = new THREE.QuadraticBezierCurve3(p0, pM, p1);
+      const geo   = new THREE.TubeGeometry(curve, 32, 0.018, 5, false);
+      geo.setDrawRange(0, 0);
+      const mesh  = new THREE.Mesh(geo, MaterialLibrary.cabo());
+      this.#cabos.push({ mesh, totalCount: geo.index.count });
+      this.#group.add(mesh);
+    }
+
+    const invX = W / 2 - 0.35;
+    const invZ = this.#sz() * (CASA.D / 2 - 0.4);
+    const dropCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(W / 2 - 0.3, bY, bZ),
+      new THREE.Vector3(invX, FH + H * 0.75, invZ * 0.8),
+      new THREE.Vector3(invX, FH + H * 0.5,  invZ),
+    ]);
+    const dropGeo  = new THREE.TubeGeometry(dropCurve, 24, 0.018, 5, false);
+    dropGeo.setDrawRange(0, 0);
+    this.#cabos.push({ mesh: new THREE.Mesh(dropGeo, MaterialLibrary.cabo()), totalCount: dropGeo.index.count });
+    this.#group.add(this.#cabos[this.#cabos.length - 1].mesh);
   }
 
-  criarCabo() {
-    const { CW, CH } = CenarioBuilder;
-    const { y, z } = this.#basePos();
-    const p0 = new THREE.Vector3(0, y, z);
-    const p1 = new THREE.Vector3(CW / 2 - 0.3, CH + 1.8, this.#signZ() * CenarioBuilder.CD * 0.4);
-    this.#caboFio = new THREE.CatmullRomCurve3([p0, p0.clone().lerp(p1, 0.4), p1]);
-    this.#caboMesh = new THREE.Mesh(
-      new THREE.TubeGeometry(this.#caboFio, 20, 0.018, 5, false),
-      MaterialFactory.cabo()
+  #buildInversores() {
+    const { W, D, FH, H } = CASA;
+    const invX = W / 2 - 0.01;
+    const invZ = this.#sz() * (D / 2 - 0.4);
+    const invY = FH + H * 0.48;
+
+    const corpo = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.52, 0.36), MaterialLibrary.inversor());
+    corpo.position.set(invX, invY, invZ);
+    corpo.rotation.y = -Math.PI / 2;
+    corpo.scale.y = 0;
+    corpo.name = `inversor-${this.#side}`;
+
+    const lcd = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.18, 0.1),
+      new THREE.MeshStandardMaterial({ color: 0x00aa44, emissive: 0x003311, emissiveIntensity: 0.8 })
     );
-    this.#caboMesh.scale.set(0, 0, 0);
-    this.#scene.add(this.#caboMesh);
+    lcd.position.set(invX + 0.09, invY + 0.1, invZ);
+    lcd.rotation.y = Math.PI / 2;
+
+    this.#inversores.push({ corpo, lcd });
+    this.#group.add(corpo, lcd);
   }
 
-  criarPaineis() {
-    const { CW } = CenarioBuilder;
-    const n = SolarArrayBuilder.PAINEIS;
-    const mat = MaterialFactory.painel();
-    const { y, z } = this.#basePos();
-    const slope = this.#slopeAngle();
+  #buildPaineis() {
+    const { W } = CASA;
+    const cols  = SolarInstaller.COLS;
+    const rows  = SolarInstaller.ROWS;
+    const slope = this.#slope();
+    const pW    = (W - 1.4) / cols - 0.06;
+    const pH    = CASA.D * 0.34 / rows - 0.06;
 
-    for (let i = 0; i < n; i++) {
-      const panel = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.04, 1.65), mat);
-      const x = -CW / 2 + 0.6 + i * ((CW - 1.0) / (n - 1));
-      panel.position.set(x, y + 0.12, z);
-      panel.rotation.x = this.#signZ() * (slope - Math.PI / 2);
-      panel.position.y += 6;  /* comeÃ§a fora da tela */
-      panel.castShadow = true;
-      panel.name = `painel-${this.#side}-${i}`;
-      this.#paineis.push({ mesh: panel, alvoY: y + 0.12 });
-      this.#scene.add(panel);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const x       = -W / 2 + 0.7 + (c + 0.5) * ((W - 1.4) / cols);
+        const zOffset = (r - (rows - 1) / 2) * (pH + 0.06);
+        const alvoY   = this.#baseY() + 0.05;
+        const alvoZ   = this.#baseZ() + this.#sz() * zOffset * Math.cos(slope);
+
+        const panel = new THREE.Mesh(
+          new THREE.BoxGeometry(pW, 0.04, pH),
+          MaterialLibrary.painelEmissivo()
+        );
+        panel.rotation.x = this.#sz() * (slope - Math.PI / 2);
+        panel.position.set(x, alvoY + 8, alvoZ);
+        panel.castShadow = true;
+        panel.receiveShadow = true;
+
+        this.#paineis.push({
+          mesh:  panel,
+          alvoY,
+          delay: (c + r * cols) / (cols * rows),
+        });
+        this.#group.add(panel);
+      }
     }
   }
 
-  /* ---- Animadores ---- */
-  animarTrilhos(p)   { const t = this.#ease(p); for (const r of this.#trilhos) r.scale.y = t; }
-  animarCabo(p)      { this.#caboMesh.scale.set(p, p, p); }
-  animarInversor(p)  { this.#inversorMesh.scale.y = this.#ease(p); }
+  /* ── Animadores ── */
+
+  animarTrilhos(p) {
+    const t = SolarInstaller.#easeOutBack(Math.min(p, 1));
+    for (const m of this.#trilhos) m.scale.x = t;
+  }
+
+  animarCabos(p) {
+    for (const c of this.#cabos) {
+      c.mesh.geometry.setDrawRange(0, Math.round(p * c.totalCount));
+    }
+  }
+
+  animarInversores(p) {
+    const t = SolarInstaller.#easeOutBack(Math.min(p, 1));
+    for (const inv of this.#inversores) inv.corpo.scale.y = t;
+  }
 
   animarPaineis(p) {
-    const n = this.#paineis.length;
-    for (let i = 0; i < n; i++) {
-      const delay  = i / n;
-      const local  = Math.max(0, Math.min(1, (p - delay) / (1 - delay / n)));
-      const item   = this.#paineis[i];
-      item.mesh.position.y = item.alvoY + (1 - this.#ease(local)) * 6;
+    for (const item of this.#paineis) {
+      const local = Math.max(0, Math.min(1, (p - item.delay) / (1 - item.delay / this.#paineis.length + 0.01)));
+      if (local <= 0) continue;
+
+      /* spring physics: y = alvo + (1-easeIn) * 8 + bounce */
+      const t       = local;
+      const omega   = 10;
+      const damping = 0.5;
+      const spring  = Math.exp(-damping * omega * t * 2.5) * Math.cos(omega * t * 2.5);
+      item.mesh.position.y = item.alvoY + (1 - SolarInstaller.#easeInCubic(t)) * 8 + spring * 0.3;
     }
   }
 
-  getCaboFio()      { return this.#caboFio; }
-  getInversorPos()  { return this.#inversorMesh ? this.#inversorMesh.position.clone() : new THREE.Vector3(); }
+  ativarEmissivo(intensity) {
+    for (const item of this.#paineis) {
+      item.mesh.material.emissiveIntensity = intensity;
+    }
+  }
 
-  #ease(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+  static #easeOutBack(t) {
+    const c1 = 1.70158, c3 = c1 + 1;
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  }
+
+  static #easeInCubic(t) { return t * t * t; }
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-   CameraRig â€” trajetÃ³rias cinematogrÃ¡ficas por estÃ¡gio
-   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-class CameraRig {
+/* ─────────────────────────────────────────────────────────────────────
+   ModelLoader — orquestra HouseBuilder + SolarInstaller
+   ───────────────────────────────────────────────────────────────────── */
+class ModelLoader {
+  #scene;
+  house  = null;
+  solar1 = null;
+  solar2 = null;
+
+  constructor(scene) { this.#scene = scene; }
+
+  load() {
+    this.house  = new HouseBuilder(this.#scene);
+    this.house.build();
+    this.solar1 = new SolarInstaller(this.#scene, 'front');
+    this.solar1.build();
+    this.solar2 = new SolarInstaller(this.#scene, 'back');
+    this.solar2.build();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   CameraController — waypoints drone cinematográficos
+   ───────────────────────────────────────────────────────────────────── */
+class CameraController {
   #camera;
-  #cfg = {};
+  #wp = {};
+  #orbitAngle = 0;
 
   constructor(camera) { this.#camera = camera; }
 
-  definirTargets(cenario) {
-    const { CW, CD, CH, RA } = CenarioBuilder;
-    const ridge   = new THREE.Vector3(0, CH + RA, 0);
-    const r1mid   = cenario.roof1Mid.clone();
-    const r2mid   = cenario.roof2Mid.clone();
-    const qPos    = cenario.quadroPos.clone();
-    const walR    = new THREE.Vector3(CW / 2 + 3, CH, 0);
+  configure(house) {
+    const { W, D, FH, H, RA } = CASA;
+    const ridge = new THREE.Vector3(0, FH + H + RA, 0);
+    const r1    = house.roof1Center.clone();
+    const r2    = house.roof2Center.clone();
+    const qPos  = house.quadroPos.clone();
+    const walR  = new THREE.Vector3(W / 2 + 3.5, FH + H * 0.5, 0);
 
-    this.#cfg = {
-      0:  { from: new THREE.Vector3(0, 18, -5),               to: new THREE.Vector3(0, 12, -10),               look: ridge  },
-      1:  { from: new THREE.Vector3(0, 12, -10),              to: new THREE.Vector3(-2, 10, -10),              look: r1mid  },
-      2:  { from: new THREE.Vector3(-2, 10, -10),             to: new THREE.Vector3(-1, 9, -10),               look: r1mid  },
-      3:  { from: new THREE.Vector3(-1, 9, -10),              to: new THREE.Vector3(walR.x + 1, walR.y + 2, -CD * 0.4), look: walR },
-      4:  { from: new THREE.Vector3(walR.x + 1, walR.y + 2, -CD * 0.4), to: new THREE.Vector3(walR.x, walR.y + 1, -CD * 0.4), look: r1mid },
-      5:  { from: new THREE.Vector3(walR.x, walR.y + 1, -CD * 0.4), to: new THREE.Vector3(walR.x, walR.y + 1, -CD * 0.4), look: r1mid },
-      6:  { from: new THREE.Vector3(walR.x, walR.y + 1, -CD * 0.4), to: new THREE.Vector3(-2, 10, 10),         look: r2mid  },
-      7:  { from: new THREE.Vector3(-2, 10, 10),              to: new THREE.Vector3(CW / 2 + 2, CH * 0.5, CD * 0.38), look: qPos },
-      8:  { from: new THREE.Vector3(CW / 2 + 2, CH * 0.5, CD * 0.38), to: new THREE.Vector3(CW / 2 + 1.5, CH * 0.4, CD * 0.35), look: qPos },
-      9:  { from: new THREE.Vector3(CW / 2 + 1.5, CH * 0.4, CD * 0.35), to: new THREE.Vector3(CW / 2 + 1.5, CH * 0.4, CD * 0.35), look: qPos },
-      10: { from: new THREE.Vector3(CW / 2 + 1.5, CH * 0.4, CD * 0.35), to: new THREE.Vector3(CW / 2 + 1.5, CH * 0.4, CD * 0.35), look: qPos },
+    this.#wp = {
+      0:  { from: v3(0, 22, 2),                     to: v3(4, 14, -14),                         look: ridge  },
+      1:  { from: v3(4, 14, -14),                    to: v3(-1, 11, -13),                        look: r1     },
+      2:  { from: v3(-1, 11, -13),                   to: v3(0, 10, -12),                         look: r1     },
+      3:  { from: v3(0, 10, -12),                    to: v3(walR.x+1, walR.y+2, -D*0.4),         look: r1     },
+      4:  { from: v3(walR.x+1, walR.y+2, -D*0.4),   to: v3(walR.x,   walR.y+1, -D*0.4),         look: r1     },
+      5:  { from: v3(walR.x,   walR.y+1, -D*0.4),   to: v3(walR.x,   walR.y+1, -D*0.4),         look: r1     },
+      6:  { from: v3(walR.x,   walR.y+1, -D*0.4),   to: v3(-1, 11, 13),                         look: r2     },
+      7:  { from: v3(-1, 11, 13),                    to: v3(0, 10, 12),                          look: r2     },
+      8:  { from: v3(0, 10, 12),                     to: v3(walR.x+1, walR.y+2, D*0.4),          look: r2     },
+      9:  { from: v3(walR.x+1, walR.y+2, D*0.4),    to: v3(walR.x,   walR.y+1, D*0.4),          look: r2     },
+      10: { from: v3(walR.x,   walR.y+1, D*0.4),    to: v3(walR.x,   walR.y+1, D*0.4),          look: r2     },
+      11: { from: v3(walR.x,   walR.y+1, D*0.4),    to: v3(W/2+2, FH+H*0.5, D*0.35),            look: qPos   },
+      12: { from: v3(W/2+2, FH+H*0.5, D*0.35),      to: v3(W/2+1.4, FH+H*0.45, D*0.32),         look: qPos   },
+      13: { from: v3(W/2+1.4, FH+H*0.45, D*0.32),   to: v3(W/2+1.4, FH+H*0.45, D*0.32),         look: qPos   },
     };
   }
 
-  atualizar(estagio, progresso) {
-    const cfg = this.#cfg[estagio];
-    if (!cfg) return;
-    const t   = this.#ease(Math.min(progresso, 1));
-    const pos = new THREE.Vector3().lerpVectors(cfg.from, cfg.to, t);
-    this.#camera.position.copy(pos);
-    this.#camera.lookAt(cfg.look);
+  update(stage, t) {
+    const wp = this.#wp[stage];
+    if (!wp) return;
+    const ease = CameraController.#easeInOut(Math.min(t, 1));
+    this.#camera.position.lerpVectors(wp.from, wp.to, ease);
+    this.#camera.lookAt(wp.look);
   }
 
-  orbitar(t) {
-    const R = 14, H = 10, angle = t * Math.PI * 2;
-    this.#camera.position.set(R * Math.cos(angle), H, R * Math.sin(angle));
-    const { CH, RA } = CenarioBuilder;
-    this.#camera.lookAt(0, CH + RA * 0.3, 0);
+  orbit(dt) {
+    this.#orbitAngle += dt * 0.00028;
+    const R = 18, H = 11;
+    this.#camera.position.set(
+      R * Math.cos(this.#orbitAngle),
+      H + Math.sin(this.#orbitAngle * 0.4) * 1.5,
+      R * Math.sin(this.#orbitAngle)
+    );
+    const { FH, H: CH, RA } = CASA;
+    this.#camera.lookAt(0, FH + CH * 0.5 + RA * 0.3, 0);
   }
 
-  #ease(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+  static #easeInOut(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-   AnimacaoMontagem â€” API pÃºblica (idÃªntica Ã  versÃ£o Canvas 2D)
-   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-class AnimacaoMontagem {
-  static #DUR = [0, 1500, 1200, 800, 600, 2000, 1000, 1800, 5200, 1400, 800, 900, Infinity];
+/* helper Vector3 */
+function v3(x, y, z) { return new THREE.Vector3(x, y, z); }
 
+/* ─────────────────────────────────────────────────────────────────────
+   AnimationController — máquina de estados com delta time
+   ───────────────────────────────────────────────────────────────────── */
+class AnimationController {
+  static #STAGES = [
+    { dur: 2000 },  //  0  drone-entrada
+    { dur: 1400 },  //  1  trilhos-1
+    { dur: 1000 },  //  2  cabos-1
+    { dur:  700 },  //  3  inversores-1
+    { dur: 2500 },  //  4  paineis-1
+    { dur: 1000 },  //  5  glow-1
+    { dur: 2000 },  //  6  pan-agua-2
+    { dur: 1400 },  //  7  trilhos-2
+    { dur: 1000 },  //  8  cabos-2
+    { dur:  700 },  //  9  inversores-2
+    { dur: 2500 },  // 10  paineis-2
+    { dur: 1500 },  // 11  cam-quadro
+    { dur:  900 },  // 12  quadro-abre
+    { dur:  900 },  // 13  luzes-on
+    { dur: Infinity }, // 14  orbita
+  ];
+
+  #models;
+  #cam;
+  #scene;
+  #stage   = 0;
+  #t       = 0;
+  #elapsed = 0;
+  #glow1   = null;
+  #glow2   = null;
+
+  constructor(scene, models, cam) {
+    this.#scene  = scene;
+    this.#models = models;
+    this.#cam    = cam;
+    this.#criarGlows();
+  }
+
+  #criarGlows() {
+    const { FH, H, RA, D } = CASA;
+    this.#glow1 = new THREE.PointLight(0xFFDD55, 0, 8);
+    this.#glow1.position.set(0, FH + H + RA * 0.55, -D / 4);
+    this.#scene.add(this.#glow1);
+
+    this.#glow2 = new THREE.PointLight(0xFFDD55, 0, 8);
+    this.#glow2.position.set(0, FH + H + RA * 0.55, D / 4);
+    this.#scene.add(this.#glow2);
+  }
+
+  reset() { this.#stage = 0; this.#t = 0; this.#elapsed = 0; }
+
+  tick(dt) {
+    const dur = AnimationController.#STAGES[this.#stage]?.dur ?? Infinity;
+    if (isFinite(dur)) {
+      this.#elapsed += dt;
+      this.#t = Math.min(this.#elapsed / dur, 1);
+    }
+    this.#dispatch(dt);
+    if (isFinite(dur) && this.#elapsed >= dur) {
+      this.#stage++;
+      this.#elapsed = 0;
+      this.#t = 0;
+    }
+  }
+
+  #dispatch(dt) {
+    const s = this.#models;
+    const p = this.#t;
+
+    switch (this.#stage) {
+      case 0:  this.#cam.update(0, p); break;
+      case 1:  this.#cam.update(1, p); s.solar1.animarTrilhos(p); break;
+      case 2:  this.#cam.update(2, p); s.solar1.animarCabos(p); break;
+      case 3:  this.#cam.update(3, p); s.solar1.animarInversores(p); break;
+      case 4:  this.#cam.update(4, p); s.solar1.animarPaineis(p); break;
+
+      case 5:
+        this.#cam.update(5, 1);
+        this.#glow1.intensity = (Math.sin(p * Math.PI * 3) * 0.5 + 0.5) * 2;
+        s.solar1.ativarEmissivo(Math.sin(p * Math.PI) * 0.6);
+        break;
+
+      case 6:
+        this.#cam.update(6, p);
+        this.#glow1.intensity = Math.max(0, 1.5 - p * 3);
+        break;
+
+      case 7:  this.#cam.update(7, p); s.solar2.animarTrilhos(p); break;
+      case 8:  this.#cam.update(8, p); s.solar2.animarCabos(p); break;
+      case 9:  this.#cam.update(9, p); s.solar2.animarInversores(p); break;
+      case 10: this.#cam.update(10, p); s.solar2.animarPaineis(p); break;
+
+      case 11:
+        this.#cam.update(11, p);
+        this.#glow2.intensity = (Math.sin(p * Math.PI * 2) * 0.4 + 0.4) * 2;
+        s.solar2.ativarEmissivo(Math.sin(p * Math.PI) * 0.6);
+        break;
+
+      case 12: {
+        this.#cam.update(12, p);
+        const quadro = this.#scene.getObjectByName('quadro');
+        const disj   = this.#scene.getObjectByName('disjuntor');
+        if (quadro) { const sc = AnimationController.#easeOutBack(p);                    quadro.scale.set(sc, sc, sc); }
+        if (disj)   { const sc = AnimationController.#easeOutBack(Math.max(0, (p-0.5)*2)); disj.scale.set(sc, sc, sc); }
+        break;
+      }
+
+      case 13: {
+        this.#cam.update(13, 1);
+        const disj = this.#scene.getObjectByName('disjuntor');
+        if (disj) disj.rotation.z = -p * Math.PI * 0.35;
+        const i = AnimationController.#easeInOut(p) * 2;
+        const h = s.house;
+        if (h.luzJanela1) h.luzJanela1.intensity = i;
+        if (h.luzJanela2) h.luzJanela2.intensity = i;
+        if (h.luzPoste)   h.luzPoste.intensity   = AnimationController.#easeInOut(p) * 2.5;
+        const led = this.#scene.getObjectByName('quadro-led');
+        if (led) led.material.emissiveIntensity = p * 1.5;
+        break;
+      }
+
+      case 14:
+        this.#cam.orbit(dt);
+        break;
+    }
+  }
+
+  static #easeOutBack(t) {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    const c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  }
+
+  static #easeInOut(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   SceneManager — renderer, scene, câmera, luzes globais, resize
+   ───────────────────────────────────────────────────────────────────── */
+class SceneManager {
   #canvas;
-  #renderer = null;
-  #scene    = null;
-  #camera   = null;
-  #cenario  = null;
-  #array1   = null;
-  #array2   = null;
-  #rig      = null;
-
-  #estagio   = 0;
-  #progresso = 0;
-  #tsEstagio = 0;
-  #tsUlt     = 0;
-  #raf       = null;
-
-  #luzGlow1 = null;
-  #luzGlow2 = null;
-  #orbitaT  = 0;
+  renderer = null;
+  scene    = null;
+  camera   = null;
 
   constructor(canvasEl) {
     this.#canvas = canvasEl;
-    if (typeof THREE === 'undefined') {
-      console.warn('AnimacaoMontagem: Three.js nÃ£o carregado.');
-      return;
-    }
-    this.#inicializarThree();
-    requestAnimationFrame(() => this.iniciar());
+    this.#init();
   }
 
-  #inicializarThree() {
-    const W = this.#canvas.clientWidth  || 400;
-    const H = this.#canvas.clientHeight || 300;
+  #init() {
+    const W = this.#canvas.clientWidth  || 480;
+    const H = this.#canvas.clientHeight || 320;
 
-    this.#renderer = new THREE.WebGLRenderer({ canvas: this.#canvas, antialias: true, alpha: true });
-    this.#renderer.setSize(W, H);
-    this.#renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.#renderer.shadowMap.enabled = true;
-    this.#renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.#canvas, antialias: true, alpha: false });
+    this.renderer.setSize(W, H);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.shadowMap.enabled   = true;
+    this.renderer.shadowMap.type      = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping         = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.1;
 
-    this.#scene  = new THREE.Scene();
-    this.#scene.background = new THREE.Color(0x87CEEB);
-    this.#scene.fog        = new THREE.Fog(0x87CEEB, 30, 60);
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x87CEEB);
+    this.scene.fog        = new THREE.FogExp2(0xaad4f0, 0.018);
 
-    this.#camera = new THREE.PerspectiveCamera(55, W / H, 0.1, 200);
-    this.#camera.position.set(0, 18, -5);
+    this.camera = new THREE.PerspectiveCamera(52, W / H, 0.1, 300);
+    this.camera.position.set(0, 22, 2);
 
-    /* IluminaÃ§Ã£o global */
-    this.#scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-
-    const sun = new THREE.DirectionalLight(0xFFF8E0, 1.3);
-    sun.position.set(10, 20, -10);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = sun.shadow.camera.bottom = -15;
-    sun.shadow.camera.right = sun.shadow.camera.top   =  15;
-    this.#scene.add(sun);
-
-    this.#scene.add(new THREE.HemisphereLight(0x87CEEB, 0x3a6b28, 0.4));
-
-    /* Glows dos painÃ©is */
-    const { CH, RA, CD } = CenarioBuilder;
-    this.#luzGlow1 = new THREE.PointLight(0xFFDD66, 0, 6);
-    this.#luzGlow1.position.set(0, CH + RA * 0.5, -CD * 0.25);
-    this.#scene.add(this.#luzGlow1);
-
-    this.#luzGlow2 = new THREE.PointLight(0xFFDD66, 0, 6);
-    this.#luzGlow2.position.set(0, CH + RA * 0.5, CD * 0.25);
-    this.#scene.add(this.#luzGlow2);
-
-    /* CenÃ¡rio */
-    this.#cenario = new CenarioBuilder(this.#scene);
-    this.#cenario.construir();
-
-    /* Arrays solares */
-    this.#array1 = new SolarArrayBuilder(this.#scene, 'front');
-    this.#array1.criarTrilhos();
-    this.#array1.criarInversor();
-    this.#array1.criarCabo();
-    this.#array1.criarPaineis();
-
-    this.#array2 = new SolarArrayBuilder(this.#scene, 'back');
-    this.#array2.criarTrilhos();
-    this.#array2.criarInversor();
-    this.#array2.criarCabo();
-    this.#array2.criarPaineis();
-
-    /* Rig cÃ¢mera */
-    this.#rig = new CameraRig(this.#camera);
-    this.#rig.definirTargets(this.#cenario);
+    this.#setupLights();
 
     const ro = new ResizeObserver(() => this.#onResize());
     ro.observe(this.#canvas.parentElement ?? this.#canvas);
   }
 
-  #onResize() {
-    if (!this.#renderer) return;
-    const W = this.#canvas.clientWidth  || 400;
-    const H = this.#canvas.clientHeight || 300;
-    this.#renderer.setSize(W, H);
-    this.#camera.aspect = W / H;
-    this.#camera.updateProjectionMatrix();
+  #setupLights() {
+    this.scene.add(new THREE.AmbientLight(0xffeedd, 0.45));
+
+    const sun = new THREE.DirectionalLight(0xFFF5E0, 2.2);
+    sun.position.set(14, 28, -10);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left   = -20;
+    sun.shadow.camera.right  =  20;
+    sun.shadow.camera.top    =  20;
+    sun.shadow.camera.bottom = -20;
+    sun.shadow.bias          = -0.001;
+    sun.shadow.normalBias    =  0.02;
+    this.scene.add(sun);
+
+    this.scene.add(new THREE.HemisphereLight(0x87CEEB, 0x3a6b28, 0.55));
+
+    const fill = new THREE.DirectionalLight(0xcce8ff, 0.4);
+    fill.position.set(-10, 8, 15);
+    this.scene.add(fill);
   }
 
-  /* â”€â”€ API pÃºblica â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  #onResize() {
+    const W = this.#canvas.clientWidth  || 480;
+    const H = this.#canvas.clientHeight || 320;
+    this.renderer.setSize(W, H);
+    this.camera.aspect = W / H;
+    this.camera.updateProjectionMatrix();
+  }
+
+  render() { this.renderer.render(this.scene, this.camera); }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   AnimacaoMontagem — fachada pública (API inalterada)
+   ───────────────────────────────────────────────────────────────────── */
+class AnimacaoMontagem {
+  #sm  = null;
+  #ml  = null;
+  #cc  = null;
+  #ac  = null;
+  #raf = null;
+  #tsUlt = 0;
+
+  constructor(canvasEl) {
+    if (typeof THREE === 'undefined') {
+      console.warn('AnimacaoMontagem: Three.js não encontrado.');
+      return;
+    }
+    this.#sm = new SceneManager(canvasEl);
+    this.#ml = new ModelLoader(this.#sm.scene);
+    this.#ml.load();
+    this.#cc = new CameraController(this.#sm.camera);
+    this.#cc.configure(this.#ml.house);
+    this.#ac = new AnimationController(this.#sm.scene, this.#ml, this.#cc);
+    requestAnimationFrame(() => this.iniciar());
+  }
+
   iniciar() {
-    if (!this.#renderer) return;
-    if (this.#raf) cancelAnimationFrame(this.#raf);
-    this.#estagio   = 0;
-    this.#progresso = 0;
-    this.#orbitaT   = 0;
-    const now = performance.now();
-    this.#tsEstagio = now;
-    this.#tsUlt     = now;
+    if (!this.#sm) return;
+    this.parar();
+    this.#ac.reset();
+    this.#tsUlt = performance.now();
     this.#raf = requestAnimationFrame(ts => this.#loop(ts));
   }
 
   reiniciar() { this.iniciar(); }
 
-  parar() { if (this.#raf) { cancelAnimationFrame(this.#raf); this.#raf = null; } }
+  parar() {
+    if (this.#raf) { cancelAnimationFrame(this.#raf); this.#raf = null; }
+  }
 
-  /* â”€â”€ Loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   #loop(ts) {
     const dt = Math.min(ts - this.#tsUlt, 50);
     this.#tsUlt = ts;
-
-    const dur = AnimacaoMontagem.#DUR[this.#estagio] ?? Infinity;
-    if (isFinite(dur)) {
-      this.#progresso = Math.min((ts - this.#tsEstagio) / dur, 1);
-    } else {
-      this.#orbitaT += dt * 0.00005;
-    }
-
-    this.#atualizar(dt);
-    this.#renderer.render(this.#scene, this.#camera);
-
-    if (isFinite(dur) && this.#progresso >= 1) {
-      this.#estagio++;
-      this.#tsEstagio = ts;
-      this.#progresso = 0;
-    }
-
+    this.#ac.tick(dt);
+    this.#sm.render();
     this.#raf = requestAnimationFrame(t => this.#loop(t));
   }
-
-  /* â”€â”€ LÃ³gica por estÃ¡gio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-  #atualizar() {
-    const p = this.#progresso;
-
-    switch (this.#estagio) {
-      case 0:
-        this.#rig.atualizar(0, p);
-        break;
-
-      case 1:
-        this.#rig.atualizar(1, p);
-        this.#array1.animarTrilhos(p);
-        break;
-
-      case 2:
-        this.#rig.atualizar(2, p);
-        this.#array1.animarCabo(p);
-        break;
-
-      case 3:
-        this.#rig.atualizar(3, p);
-        this.#array1.animarInversor(p);
-        break;
-
-      case 4:
-        this.#rig.atualizar(4, p);
-        this.#array1.animarPaineis(p);
-        break;
-
-      case 5:
-        this.#rig.atualizar(5, p);
-        this.#luzGlow1.intensity = Math.sin(p * Math.PI * 2) * 1.2 + 0.6;
-        break;
-
-      case 6:
-        this.#rig.atualizar(6, p);
-        this.#luzGlow1.intensity = Math.max(0, 1 - p * 2);
-        break;
-
-      case 7:
-        this.#rig.atualizar(7, p);
-        this.#array2.animarTrilhos(Math.min(p / 0.23, 1));
-        this.#array2.animarCabo(Math.min(Math.max((p - 0.23) / 0.15, 0), 1));
-        this.#array2.animarInversor(Math.min(Math.max((p - 0.38) / 0.12, 0), 1));
-        this.#array2.animarPaineis(Math.min(Math.max((p - 0.50) / 0.50, 0), 1));
-        if (p > 0.85) this.#luzGlow2.intensity = Math.sin((p - 0.85) / 0.15 * Math.PI) * 1.2;
-        break;
-
-      case 8:
-        this.#rig.atualizar(8, p);
-        break;
-
-      case 9:
-        this.#rig.atualizar(9, p);
-        this.#animarQuadro(p);
-        break;
-
-      case 10:
-        this.#rig.atualizar(10, 1);
-        this.#animarDisjuntor(p);
-        break;
-
-      case 11:
-        this.#rig.orbitar(this.#orbitaT);
-        break;
-    }
-  }
-
-  #animarQuadro(p) {
-    const quadro = this.#scene.getObjectByName('quadro');
-    if (quadro) { const s = this.#ease(p); quadro.scale.set(s, s, s); }
-    const disj  = this.#scene.getObjectByName('disjuntor');
-    if (disj)  { const s = this.#ease(Math.max(0, (p - 0.5) * 2)); disj.scale.set(s, s, s); }
-  }
-
-  #animarDisjuntor(p) {
-    const disj = this.#scene.getObjectByName('disjuntor');
-    if (disj) disj.rotation.z = p * Math.PI * 0.4;
-
-    const i = this.#ease(p) * 1.8;
-    if (this.#cenario.luzJanela1) this.#cenario.luzJanela1.intensity = i;
-    if (this.#cenario.luzJanela2) this.#cenario.luzJanela2.intensity = i;
-    if (this.#cenario.luzPoste)   this.#cenario.luzPoste.intensity   = this.#ease(p) * 2;
-  }
-
-  #ease(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 }
