@@ -647,6 +647,48 @@ class CalculadoraController {
   }
 }
 /* ===================================================
+   INSTALAÇÃO PWA (banner "Adicionar à tela inicial")
+   =================================================== */
+class PwaInstallController {
+  #deferredPrompt = null;
+  #banner;
+  #btnInstall;
+  #btnDismiss;
+
+  constructor() {
+    this.#banner     = document.getElementById('pwa-banner');
+    this.#btnInstall = document.getElementById('pwa-install-btn');
+    this.#btnDismiss = document.getElementById('pwa-dismiss-btn');
+    this.#bind();
+  }
+
+  #bind() {
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault();
+      this.#deferredPrompt = e;
+      this.#banner.hidden = false;
+    });
+
+    window.addEventListener('appinstalled', () => {
+      this.#banner.hidden = true;
+      this.#deferredPrompt = null;
+    });
+
+    this.#btnInstall.addEventListener('click', async () => {
+      if (!this.#deferredPrompt) return;
+      this.#deferredPrompt.prompt();
+      const { outcome } = await this.#deferredPrompt.userChoice;
+      this.#deferredPrompt = null;
+      this.#banner.hidden = true;
+    });
+
+    this.#btnDismiss.addEventListener('click', () => {
+      this.#banner.hidden = true;
+    });
+  }
+}
+
+/* ===================================================
    COMPARTILHAMENTO (WhatsApp / E-mail / Telegram / Print)
    =================================================== */
 class ShareController {
@@ -700,9 +742,36 @@ class ShareController {
     return `Orçamento EFV Solar — ${this.#nomeAtual}\nProfissional: Lino M. DE AZEVEDO | (11) 97239-5317\nhttps://www.instagram.com/efvsolar_oficia`;
   }
 
-  #compartilharWhatsApp() {
-    const msg = encodeURIComponent(this.#textoResumo());
-    window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank', 'noopener');
+  async #compartilharWhatsApp() {
+    if (!this.#htmlAtual) return;
+
+    // Monta o arquivo para compartilhamento nativo
+    const blob = new Blob([this.#htmlAtual], { type: 'text/html;charset=utf-8' });
+    const file = new File([blob], 'orcamento-efv-solar.html', { type: 'text/html' });
+
+    // Web Share API com arquivo — abre painel nativo (Android / iOS) incluindo WhatsApp
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: `Orçamento EFV Solar — ${this.#nomeAtual}`,
+          text:  `Orçamento gerado pela EFV Solar\nProfissional: Lino M. DE AZEVEDO | (11) 97239-5317`,
+        });
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return; // usuário cancelou — não faz nada
+      }
+    }
+
+    // Fallback (desktop / navegador sem Share API com arquivo):
+    // baixa o arquivo e abre WhatsApp com mensagem orientando o envio manual
+    this.#baixarPDF();
+    const msg = encodeURIComponent(
+      `Orçamento EFV Solar — ${this.#nomeAtual}\n` +
+      `Profissional: Lino M. DE AZEVEDO | (11) 97239-5317\n` +
+      `📎 Arquivo baixado — anexe no WhatsApp.`
+    );
+    setTimeout(() => window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank', 'noopener'), 600);
   }
 
   #compartilharEmail() {
@@ -750,6 +819,7 @@ class EfvSolarApp {
   #financasCtrl        = null;
   #calculadoraCtrl     = null;
   #shareCtrl           = null;
+  #pwaCtrl             = null;
 
   constructor() {
     this.#btnGerar = document.getElementById('btn-gerar-pdf');
@@ -764,6 +834,7 @@ class EfvSolarApp {
     this.#calculadoraCtrl = new CalculadoraController();
     this.#shareCtrl       = new ShareController();
     this.#router          = new Router(tela => this.#aoNavegar(tela));
+    this.#pwaCtrl         = new PwaInstallController();
     this.#vincularEventos();
     EfvSolarApp.#registrarServiceWorker();
   }
