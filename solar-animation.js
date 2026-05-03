@@ -214,6 +214,7 @@ class HouseBuilder {
   luzJanela1  = null;
   luzJanela2  = null;
   luzPoste    = null;
+  caboParede  = null;
 
   constructor(scene) {
     this.#scene = scene;
@@ -234,6 +235,7 @@ class HouseBuilder {
     this.#quadroEletrico();
     this.#luzes();
     this.#calcularRefs();
+    this.#caboParede();
   }
 
   #solo() {
@@ -503,6 +505,28 @@ class HouseBuilder {
     this.roof1Center.set(0, FH + H + RA * 0.45, -D / 4);
     this.roof2Center.set(0, FH + H + RA * 0.45,  D / 4);
   }
+
+  #caboParede() {
+    const { W, D, FH, H } = CASA;
+    const qPos = this.quadroPos;
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(W / 2 - 0.01, FH + H * 0.48, -(D / 2 - 0.4)),
+      new THREE.Vector3(W / 2 + 0.03, FH + H + 0.1,  -(D / 2 - 0.4) * 0.5),
+      new THREE.Vector3(W / 2 + 0.03, FH + H * 0.72,   qPos.z * 0.5),
+      new THREE.Vector3(qPos.x,       qPos.y + 0.2,     qPos.z),
+    ]);
+    const geo = new THREE.TubeGeometry(curve, 40, 0.022, 6, false);
+    geo.setDrawRange(0, 0);
+    const mesh = new THREE.Mesh(geo, MaterialLibrary.cabo());
+    mesh.castShadow = true;
+    this.#group.add(mesh);
+    this.caboParede = { mesh, curve, totalCount: geo.index.count };
+  }
+
+  animarCaboParede(p) {
+    if (!this.caboParede) return;
+    this.caboParede.mesh.geometry.setDrawRange(0, Math.round(p * this.caboParede.totalCount));
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -517,6 +541,7 @@ class SolarInstaller {
   #cabos      = [];
   #inversores = [];
   #paineis    = [];
+  #curves     = [];
 
   static COLS = 3;
   static ROWS = 2;
@@ -568,6 +593,7 @@ class SolarInstaller {
       const pM = new THREE.Vector3(0,             bY + 0.18,         bZ);
       const p1 = new THREE.Vector3( W / 2 - 0.3, bY + offset * 0.3, bZ);
       const curve = new THREE.QuadraticBezierCurve3(p0, pM, p1);
+      this.#curves.push(curve);
       const geo   = new THREE.TubeGeometry(curve, 32, 0.018, 5, false);
       geo.setDrawRange(0, 0);
       const mesh  = new THREE.Mesh(geo, MaterialLibrary.cabo());
@@ -582,6 +608,7 @@ class SolarInstaller {
       new THREE.Vector3(invX, FH + H * 0.75, invZ * 0.8),
       new THREE.Vector3(invX, FH + H * 0.5,  invZ),
     ]);
+    this.#curves.push(dropCurve);
     const dropGeo  = new THREE.TubeGeometry(dropCurve, 24, 0.018, 5, false);
     dropGeo.setDrawRange(0, 0);
     this.#cabos.push({ mesh: new THREE.Mesh(dropGeo, MaterialLibrary.cabo()), totalCount: dropGeo.index.count });
@@ -683,6 +710,8 @@ class SolarInstaller {
     }
   }
 
+  getCurves() { return [...this.#curves]; }
+
   static #easeOutBack(t) {
     const c1 = 1.70158, c3 = c1 + 1;
     if (t <= 0) return 0;
@@ -691,6 +720,46 @@ class SolarInstaller {
   }
 
   static #easeInCubic(t) { return t * t * t; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   EnergyFlow — orbs de energia percorrendo os cabos do sistema solar
+   ───────────────────────────────────────────────────────────────────── */
+class EnergyFlow {
+  #scene;
+  #curves = [];
+  #orbs   = [];
+
+  constructor(scene) { this.#scene = scene; }
+
+  addCurves(curves) {
+    for (const c of curves) this.#curves.push(c);
+  }
+
+  build() {
+    for (let i = 0; i < 4; i++) {
+      const light = new THREE.PointLight(0xFF9900, 0, 2.5);
+      this.#scene.add(light);
+      this.#orbs.push({ light, offset: i / 4 });
+    }
+  }
+
+  tick(p) {
+    if (!this.#curves.length) return;
+    const n = this.#curves.length;
+    for (const orb of this.#orbs) {
+      const t      = (p + orb.offset) % 1;
+      const idx    = Math.min(Math.floor(t * n), n - 1);
+      const localT = (t * n) % 1;
+      const pos    = this.#curves[idx].getPoint(localT);
+      orb.light.position.copy(pos);
+      orb.light.intensity = 2.5 * Math.sin(t * Math.PI);
+    }
+  }
+
+  reset() {
+    for (const orb of this.#orbs) orb.light.intensity = 0;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -747,6 +816,12 @@ class CameraController {
       11: { from: v3(walR.x,   walR.y+1, D*0.4),    to: v3(W/2+2, FH+H*0.5, D*0.35),            look: qPos   },
       12: { from: v3(W/2+2, FH+H*0.5, D*0.35),      to: v3(W/2+1.4, FH+H*0.45, D*0.32),         look: qPos   },
       13: { from: v3(W/2+1.4, FH+H*0.45, D*0.32),   to: v3(W/2+1.4, FH+H*0.45, D*0.32),         look: qPos   },
+      /* ── seqüncia fluxo de energia ── */
+      15: { from: v3(walR.x-2, walR.y+2, 0),          to: v3(walR.x-2, walR.y+2, 0),               look: v3(0, FH+H+RA*0.5, 0)     },
+      16: { from: v3(walR.x-2, walR.y+2, 0),          to: v3(walR.x+0.5, walR.y+1.5, -D*0.2),      look: r1                        },
+      17: { from: v3(W/2+2.5, FH+H+RA*0.3, D*0.28),   to: v3(W/2+2.5, FH+H*0.38, D*0.32),         look: qPos                      },
+      18: { from: v3(W/2+2.5, FH+H*0.38, D*0.32),     to: v3(0, 9, -20),                           look: v3(0, FH+H*0.5, 0)        },
+      19: { from: v3(0, 9, -20),                       to: v3(0, 9, -20),                           look: v3(0, FH+H*0.5, 0)        },
     };
   }
 
@@ -768,6 +843,10 @@ class CameraController {
     );
     const { FH, H: CH, RA } = CASA;
     this.#camera.lookAt(0, FH + CH * 0.5 + RA * 0.3, 0);
+  }
+
+  startOrbit(fromPos) {
+    this.#orbitAngle = Math.atan2(fromPos.z, fromPos.x);
   }
 
   static #easeInOut(t) {
@@ -797,24 +876,37 @@ class AnimationController {
     { dur: 1500 },  // 11  cam-quadro
     { dur:  900 },  // 12  quadro-abre
     { dur:  900 },  // 13  luzes-on
-    { dur: Infinity }, // 14  orbita
+    { dur: 1800 },  // 14  orbita-curta
+    { dur: 1200 },  // 15  emissivo-fluxo
+    { dur: 1500 },  // 16  energy-orbs
+    { dur: 1800 },  // 17  cabo-parede
+    { dur: 1500 },  // 18  wide-shot
+    { dur: 2000 },  // 19  branding
+    { dur: Infinity }, // 20  estatico
   ];
 
   #models;
   #cam;
   #scene;
+  #energyFlow     = null;
+  #sound          = null;
+  #stageCallbacks = new Map();
   #stage   = 0;
   #t       = 0;
   #elapsed = 0;
   #glow1   = null;
   #glow2   = null;
 
-  constructor(scene, models, cam) {
-    this.#scene  = scene;
-    this.#models = models;
-    this.#cam    = cam;
+  constructor(scene, models, cam, energyFlow, sound) {
+    this.#scene      = scene;
+    this.#models     = models;
+    this.#cam        = cam;
+    this.#energyFlow = energyFlow ?? null;
+    this.#sound      = sound ?? null;
     this.#criarGlows();
   }
+
+  onStageEnter(stage, fn) { this.#stageCallbacks.set(stage, fn); }
 
   #criarGlows() {
     const { FH, H, RA, D } = CASA;
@@ -837,9 +929,11 @@ class AnimationController {
     }
     this.#dispatch(dt);
     if (isFinite(dur) && this.#elapsed >= dur) {
-      this.#stage++;
+      const next = this.#stage + 1;
+      this.#stage   = next;
       this.#elapsed = 0;
-      this.#t = 0;
+      this.#t       = 0;
+      this.#stageCallbacks.get(next)?.();
     }
   }
 
@@ -902,6 +996,41 @@ class AnimationController {
       case 14:
         this.#cam.orbit(dt);
         break;
+
+      case 15:
+        this.#cam.update(15, p);
+        this.#models.solar1.ativarEmissivo(0.6 + Math.sin(p * Math.PI * 4) * 0.4);
+        this.#models.solar2.ativarEmissivo(0.6 + Math.sin(p * Math.PI * 4 + 0.5) * 0.4);
+        this.#glow1.intensity = 1.0 + Math.sin(p * Math.PI * 3) * 0.5;
+        this.#glow2.intensity = 1.0 + Math.sin(p * Math.PI * 3 + 0.8) * 0.5;
+        break;
+
+      case 16:
+        this.#cam.update(16, p);
+        this.#energyFlow?.tick(p);
+        this.#models.solar1.ativarEmissivo(0.7);
+        this.#models.solar2.ativarEmissivo(0.7);
+        break;
+
+      case 17:
+        this.#cam.update(17, p);
+        this.#models.house.animarCaboParede(p);
+        this.#energyFlow?.reset();
+        break;
+
+      case 18:
+        this.#cam.update(18, p);
+        this.#glow1.intensity = Math.max(0, 1.5 - p * 1.8);
+        this.#glow2.intensity = Math.max(0, 1.5 - p * 1.8);
+        break;
+
+      case 19:
+        this.#cam.update(19, p);
+        break;
+
+      case 20:
+        /* cena estática — loop para via callback */
+        break;
     }
   }
 
@@ -915,6 +1044,44 @@ class AnimationController {
   static #easeInOut(t) {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   SoundController — efeitos sonoros via Web Audio API
+   ───────────────────────────────────────────────────────────────────── */
+class SoundController {
+  #ctx = null;
+
+  #getCtx() {
+    if (!this.#ctx) {
+      this.#ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (this.#ctx.state === 'suspended') this.#ctx.resume();
+    return this.#ctx;
+  }
+
+  #beep(freq, endFreq, gain, duration) {
+    try {
+      const ctx = this.#getCtx();
+      const osc = ctx.createOscillator();
+      const vol = ctx.createGain();
+      osc.type  = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(endFreq, ctx.currentTime + duration);
+      vol.gain.setValueAtTime(gain, ctx.currentTime);
+      vol.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+      osc.connect(vol);
+      vol.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + duration);
+    } catch (_) { /* bloqueado pelo browser — silencioso */ }
+  }
+
+  tocarEncaixe()  { this.#beep(820, 440, 0.12, 0.18); }
+  tocarEletrico() { this.#beep(120,  80, 0.08, 0.35); }
+  tocarLuz()      { this.#beep(1200, 600, 0.06, 0.22); }
+
+  dispose() { this.#ctx?.close(); this.#ctx = null; }
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -993,12 +1160,15 @@ class SceneManager {
    AnimacaoMontagem — fachada pública (API inalterada)
    ───────────────────────────────────────────────────────────────────── */
 class AnimacaoMontagem {
-  #sm  = null;
-  #ml  = null;
-  #cc  = null;
-  #ac  = null;
-  #raf = null;
-  #tsUlt = 0;
+  #sm         = null;
+  #ml         = null;
+  #cc         = null;
+  #ac         = null;
+  #ef         = null;
+  #sound      = null;
+  #raf        = null;
+  #tsUlt      = 0;
+  #brandingEl = null;
 
   constructor(canvasEl) {
     if (typeof THREE === 'undefined') {
@@ -1010,13 +1180,53 @@ class AnimacaoMontagem {
     this.#ml.load();
     this.#cc = new CameraController(this.#sm.camera);
     this.#cc.configure(this.#ml.house);
-    this.#ac = new AnimationController(this.#sm.scene, this.#ml, this.#cc);
+    this.#ef = new EnergyFlow(this.#sm.scene);
+    this.#ef.addCurves(this.#ml.solar1.getCurves());
+    this.#ef.addCurves(this.#ml.solar2.getCurves());
+    this.#ef.build();
+    this.#sound = new SoundController();
+    this.#ac = new AnimationController(this.#sm.scene, this.#ml, this.#cc, this.#ef, this.#sound);
+    this.#bindCallbacks(canvasEl);
     requestAnimationFrame(() => this.iniciar());
+  }
+
+  #bindCallbacks(canvasEl) {
+    this.#ac.onStageEnter(4,  () => this.#sound.tocarEncaixe());
+    this.#ac.onStageEnter(10, () => this.#sound.tocarEncaixe());
+    this.#ac.onStageEnter(14, () => this.#cc.startOrbit(this.#sm.camera.position));
+    this.#ac.onStageEnter(17, () => this.#sound.tocarEletrico());
+    this.#ac.onStageEnter(19, () => this.#mostrarBranding(canvasEl));
+    this.#ac.onStageEnter(20, () => { this.#sm.render(); this.parar(); });
+  }
+
+  #mostrarBranding(canvasEl) {
+    const container = canvasEl.parentElement;
+    if (!container) return;
+    const el = document.createElement('div');
+    el.className = 'anim-branding';
+    el.innerHTML =
+      '<div class="anim-branding__logo">EFV Solar</div>' +
+      '<div class="anim-branding__tagline">Iluminando o seu futuro</div>' +
+      '<button class="anim-branding__btn" type="button">Fa\u00e7a seu or\u00e7amento</button>';
+    el.querySelector('.anim-branding__btn').addEventListener('click', () => {
+      document.getElementById('btn-novo-orcamento')?.click();
+    });
+    container.appendChild(el);
+    this.#brandingEl = el;
+    void el.offsetWidth; /* força reflow para CSS transition funcionar */
+    el.classList.add('anim-branding--visivel');
+    this.#sound.tocarLuz();
+  }
+
+  #removerBranding() {
+    if (this.#brandingEl) { this.#brandingEl.remove(); this.#brandingEl = null; }
   }
 
   iniciar() {
     if (!this.#sm) return;
     this.parar();
+    this.#removerBranding();
+    this.#ef?.reset();
     this.#ac.reset();
     this.#tsUlt = performance.now();
     this.#raf = requestAnimationFrame(ts => this.#loop(ts));
