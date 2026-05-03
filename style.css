@@ -1507,27 +1507,28 @@ body {
    =================================================== */
 .pwa-banner {
   position: fixed;
-  bottom: 72px; /* acima do bottom-nav */
+  top: 0;
   left: 50%;
   transform: translateX(-50%);
   width: calc(100% - 24px);
   max-width: 480px;
   background: #1F2937;
-  border: 1px solid rgba(255, 184, 0, 0.35);
-  border-radius: 14px;
-  padding: 12px 14px;
+  border: 0 solid rgba(255, 184, 0, 0.35);
+  border-bottom-width: 1px;
+  border-radius: 0 0 14px 14px;
+  padding: 10px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.55), 0 0 0 1px rgba(255,184,0,.12);
-  z-index: 900;
-  animation: pwa-slide-up .35s cubic-bezier(.22,1,.36,1) both;
+  box-shadow: 0 4px 24px rgba(0,0,0,.55), 0 0 0 1px rgba(255,184,0,.12);
+  z-index: 1100;
+  animation: pwa-slide-down-in .35s cubic-bezier(.22,1,.36,1) both;
 }
 
-@keyframes pwa-slide-up {
-  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0);    }
+@keyframes pwa-slide-down-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-100%); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0);     }
 }
 
 .pwa-banner-left {
@@ -1606,12 +1607,12 @@ body {
 /* garante que [hidden] não seja sobrescrito por display:flex do banner */
 .pwa-banner[hidden] { display: none !important; }
 
-@keyframes pwa-slide-down {
-  from { opacity: 1; transform: translateX(-50%) translateY(0);      }
-  to   { opacity: 0; transform: translateX(-50%) translateY(140px);  }
+@keyframes pwa-slide-up-out {
+  from { opacity: 1; transform: translateX(-50%) translateY(0);       }
+  to   { opacity: 0; transform: translateX(-50%) translateY(-110%);   }
 }
 .pwa-banner--saindo {
-  animation: pwa-slide-down .38s cubic-bezier(.55, 0, 1, .45) both;
+  animation: pwa-slide-up-out .36s cubic-bezier(.55, 0, 1, .45) both;
   pointer-events: none;
 }
 

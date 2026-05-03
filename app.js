@@ -648,9 +648,13 @@ class CalculadoraController {
 }
 /* ===================================================
    INSTALAÇÃO PWA (banner "Adicionar à tela inicial")
+   Comportamento:
+     - Aparece no TOPO a cada nova sessão (sem memória de dismiss)
+     - Desaparece permanentemente apenas quando o app for instalado
+     - Botão ✕ fecha só na sessão atual; próxima visita exibe novamente
    =================================================== */
 class PwaInstallController {
-  static #DISMISSED_KEY = 'efv_pwa_dismissed';
+  static #INSTALLED_KEY = 'efv_pwa_installed';
   #deferredPrompt = null;
   #banner;
   #btnInstall;
@@ -664,11 +668,11 @@ class PwaInstallController {
   }
 
   #bind() {
-    /* Não mostrar se app já instalado (modo standalone) ou usuário já dispensou */
+    /* Não mostrar se app já instalado (modo standalone ou já instalado antes) */
     const jaInstalado = window.matchMedia('(display-mode: standalone)').matches
-      || window.navigator.standalone === true;
-    const jaDispensado = !!localStorage.getItem(PwaInstallController.#DISMISSED_KEY);
-    if (jaInstalado || jaDispensado) return;
+      || window.navigator.standalone === true
+      || !!localStorage.getItem(PwaInstallController.#INSTALLED_KEY);
+    if (jaInstalado) return;
 
     window.addEventListener('beforeinstallprompt', e => {
       e.preventDefault();
@@ -677,9 +681,7 @@ class PwaInstallController {
     });
 
     window.addEventListener('appinstalled', () => {
-      this.#banner.hidden = true;
-      this.#deferredPrompt = null;
-      localStorage.setItem(PwaInstallController.#DISMISSED_KEY, '1');
+      this.#fecharDefinitivo();
     });
 
     this.#btnInstall.addEventListener('click', async () => {
@@ -687,22 +689,30 @@ class PwaInstallController {
       this.#deferredPrompt.prompt();
       const { outcome } = await this.#deferredPrompt.userChoice;
       this.#deferredPrompt = null;
-      this.#banner.hidden = true;
       if (outcome === 'accepted') {
-        localStorage.setItem(PwaInstallController.#DISMISSED_KEY, '1');
+        this.#fecharDefinitivo();
+      } else {
+        this.#fecharSessao();
       }
     });
 
-    this.#btnDismiss.addEventListener('click', () => this.#dispensar());
+    this.#btnDismiss.addEventListener('click', () => this.#fecharSessao());
   }
 
-  #dispensar() {
-    localStorage.setItem(PwaInstallController.#DISMISSED_KEY, '1');
+  /* Fecha só nesta sessão — banner volta na próxima visita */
+  #fecharSessao() {
     this.#banner.classList.add('pwa-banner--saindo');
     setTimeout(() => {
       this.#banner.hidden = true;
       this.#banner.classList.remove('pwa-banner--saindo');
-    }, 420);
+    }, 380);
+  }
+
+  /* Fecha permanentemente — app foi instalado */
+  #fecharDefinitivo() {
+    localStorage.setItem(PwaInstallController.#INSTALLED_KEY, '1');
+    this.#banner.hidden = true;
+    this.#deferredPrompt = null;
   }
 }
 
