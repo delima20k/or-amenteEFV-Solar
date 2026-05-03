@@ -5,6 +5,7 @@ const FIELDS = [
   { id: 'nome',            label: 'Nome do Cliente',     section: 'cliente'       },
   { id: 'endereco',        label: 'Endereço do Cliente', section: 'cliente'       },
   { id: 'contato',         label: 'Contato do Cliente',  section: 'cliente'       },
+  { id: 'qtd_placas',      label: 'Quantidade de Placas',section: 'equipamentos'  },
   { id: 'inversor',        label: 'Inversor',            section: 'equipamentos'  },
   { id: 'estrutura',       label: 'Estrutura',           section: 'equipamentos'  },
   { id: 'cabo_preto',      label: 'Cabo CC Preto',       section: 'equipamentos'  },
@@ -952,9 +953,13 @@ class EfvSolarApp {
 
       const htmlPDF = PrintBuilder.build(dados, this.#logoBase64);
       document.getElementById('orcamento-form').reset();
-      /* Se o formulário estava aberto como sheet: fecha antes de abrir o modal de compartilhamento */
       this.#fecharSheet();
-      this.#shareCtrl.abrir(htmlPDF, nome);
+
+      const win = window.open('', '_blank');
+      if (!win) { alert('Permita pop-ups para salvar o PDF.'); return; }
+      win.document.write(htmlPDF);
+      win.document.close();
+      win.addEventListener('load', () => setTimeout(() => win.print(), 400));
     } finally {
       this.#setCarregando(false);
     }

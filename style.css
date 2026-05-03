@@ -1603,6 +1603,9 @@ body {
 }
 .pwa-dismiss-btn:hover { border-color: rgba(255,255,255,.5); color: var(--white); }
 
+/* garante que [hidden] não seja sobrescrito por display:flex do banner */
+.pwa-banner[hidden] { display: none !important; }
+
 @keyframes pwa-slide-down {
   from { opacity: 1; transform: translateX(-50%) translateY(0);      }
   to   { opacity: 0; transform: translateX(-50%) translateY(140px);  }
