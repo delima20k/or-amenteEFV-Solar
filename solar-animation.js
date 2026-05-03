@@ -773,453 +773,11 @@ class Pole {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   RackingStructure — trilhos e longarinas de alumínio no telhado (água esq.)
-   A normal do telhado esquerdo aponta para cima-esquerda (nx<0, ny>0).
-   Cada barra é posicionada na superfície via Roof.roofPoint e fica ACIMA
-   do telhado ao longo da normal. A animação de queda usa a normal para
-   que a barra despenque perpendicularmente à superfície.
-   meshes[]: 7 Mesh + userData.restPos(Vector3) + userData.normal(Vector3)
-   ───────────────────────────────────────────────────────────────────── */
-class RackingStructure {
-  #grp;
-  meshes = [];
-
-  /* Normal unitária do plano da água esquerda (X < 0) */
-  static get slopeNormal() {
-    const { RA, W } = CASA;
-    const slope = Math.atan2(RA, W / 2);
-    return new THREE.Vector3(Math.sin(slope), Math.cos(slope), 0).normalize();
-  }
-
-  constructor(parentGrp) {
-    this.#grp = new THREE.Group();
-    parentGrp.add(this.#grp);
-    this.#build();
-  }
-
-  static #cylFromPoints(p1, p2, radius, mat) {
-    const dir = new THREE.Vector3().subVectors(p2, p1);
-    const len = dir.length();
-    if (len < 1e-6) return null;
-    const mesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(radius, radius, len, 6),
-      mat
-    );
-    const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-    mesh.position.copy(mid);
-    const q = new THREE.Quaternion();
-    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().divideScalar(len));
-    mesh.quaternion.copy(q);
-    mesh.castShadow = true;
-    return mesh;
-  }
-
-  #build() {
-    const { W, D, EV } = CASA;
-    const mat  = MaterialLibrary.aluminio();
-    const R    = 0.025;
-    const norm = RackingStructure.slopeNormal;
-    const LIFT = 0.06; // distância acima da superfície (ao longo da normal)
-
-    // 3 trilhos horizontais — paralelos ao eixo Z, numa posição X fixa do slope
-    for (const x of [-W * 0.14, -W * 0.28, -W * 0.42]) {
-      const p1 = Roof.roofPoint(x, -(D / 2 - EV * 0.1), LIFT);
-      const p2 = Roof.roofPoint(x,  (D / 2 - EV * 0.1), LIFT);
-      const m  = RackingStructure.#cylFromPoints(p1, p2, R, mat);
-      const restPos = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-      m.userData.restPos = restPos.clone();
-      m.userData.normal  = norm.clone();
-      m.visible = false;
-      this.#grp.add(m);
-      this.meshes.push(m);
-    }
-
-    // 4 longarinas — descem o slope (de cumeeira ao beiral) ao longo de X, em Z fixo
-    for (const z of [-D * 0.35, -D * 0.12, D * 0.12, D * 0.35]) {
-      const p1 = Roof.roofPoint(-W * 0.05, z, LIFT);
-      const p2 = Roof.roofPoint(-W * 0.45, z, LIFT);
-      const m  = RackingStructure.#cylFromPoints(p1, p2, R, mat);
-      const restPos = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-      m.userData.restPos = restPos.clone();
-      m.userData.normal  = norm.clone();
-      m.visible = false;
-      this.#grp.add(m);
-      this.meshes.push(m);
-    }
-  }
-}
-
-/* ─────────────────────────────────────────────────────────────────────
-   Inverter — caixa do inversor na parede direita + cabo animado
-   cable1: TubeGeometry com drawRange animado 0 → index.count
-   ───────────────────────────────────────────────────────────────────── */
-class Inverter {
-  #grp;
-  mesh   = null;
-  cable1 = null;
-
-  constructor(parentGrp) {
-    this.#grp = new THREE.Group();
-    parentGrp.add(this.#grp);
-    this.#build();
-  }
-
-  #build() {
-    const { W, D, H, FH, WT } = CASA;
-
-    // Caixa metálica do inversor fixada na parede direita (X = +W/2)
-    this.mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(WT + 0.04, 0.52, 0.68),
-      new THREE.MeshStandardMaterial({ color: 0xc8d4dc, roughness: 0.25, metalness: 0.78 })
-    );
-    this.mesh.position.set(W / 2 + (WT + 0.04) / 2, FH + H * 0.46, -D * 0.26);
-    this.mesh.castShadow = true;
-    this.mesh.visible   = false;
-    this.#grp.add(this.mesh);
-
-    // LED indicador (emissivo verde)
-    const led = new THREE.Mesh(
-      new THREE.BoxGeometry(0.05, 0.05, 0.02),
-      new THREE.MeshStandardMaterial({ color: 0x00ff60, emissive: new THREE.Color(0x00ff60), emissiveIntensity: 1.2 })
-    );
-    led.position.set(W / 2 + WT + 0.05, FH + H * 0.46 + 0.18, -D * 0.26);
-    led.rotation.y  = Math.PI / 2;
-    led.visible     = false;
-    this.mesh.userData.led = led;
-    this.#grp.add(led);
-
-    // Cabo: inversor → topo da parede → telhado → área dos painéis
-    const curve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(W / 2 + WT + 0.04, FH + H * 0.46 + 0.28, -D * 0.26),
-      new THREE.Vector3(W / 2 + 0.02,      FH + H + 0.06,         -D * 0.22),
-      Roof.roofPoint(-W * 0.08, -D * 0.22, 0.10),
-      Roof.roofPoint(-W * 0.14, -D * 0.12, 0.10),
-      Roof.roofPoint(-W * 0.28,  0,         0.10),
-    ]);
-    const tubeGeo = new THREE.TubeGeometry(curve, 40, 0.018, 5, false);
-    tubeGeo.setDrawRange(0, 0);
-    this.cable1 = new THREE.Mesh(tubeGeo, MaterialLibrary.cabo());
-    this.cable1.visible = false;
-    this.#grp.add(this.cable1);
-  }
-}
-
-/* ─────────────────────────────────────────────────────────────────────
-   SolarPanelArray — 12 painéis fotovoltaicos na água esquerda do telhado
-   Layout: 4 colunas (eixo Z) × 3 fileiras (desce o slope, eixo X)
-   Cada painel é um PlaneGeometry alinhado ao plano inclinado usando
-   Object3D.lookAt para que a face normal coincida com a normal do telhado.
-   userData.restPos e userData.normal são usados pela animação.
-   ───────────────────────────────────────────────────────────────────── */
-class SolarPanelArray {
-  #grp;
-  panels = [];
-
-  constructor(parentGrp) {
-    this.#grp = new THREE.Group();
-    parentGrp.add(this.#grp);
-    this.#build();
-  }
-
-  #build() {
-    const { W, D, RA } = CASA;
-    const slope     = Math.atan2(RA, W / 2);
-    // Normal unitária da água esquerda (aponta para fora = para cima e para esquerda)
-    const norm      = RackingStructure.slopeNormal;
-    const panelMat  = SolarPanelArray.#panelMat();
-    const frameMat  = MaterialLibrary.aluminio();
-    const LIFT      = 0.16; // deslocamento acima da superfície ao longo da normal
-    const DROP_DIST = 5.0;  // distância inicial acima da posição final (animação)
-
-    // 3 fileiras ao longo do slope (X decresce: cumeeira → beiral)
-    const xRows = [-W * 0.13, -W * 0.27, -W * 0.41];
-    // 4 colunas ao longo de Z
-    const zCols = [-D * 0.35, -D * 0.12, D * 0.12, D * 0.35];
-
-    for (const x of xRows) {
-      for (const z of zCols) {
-        const restPos = Roof.roofPoint(x, z, LIFT);
-
-        // Moldura de alumínio
-        const frame = new THREE.Mesh(
-          new THREE.BoxGeometry(0.04, 1.1, 1.72),
-          frameMat
-        );
-        // Alinha a face da moldura à normal do telhado:
-        // lookAt aponta o eixo +Z local para a direção da normal
-        frame.position.copy(restPos);
-        frame.lookAt(restPos.clone().add(norm));
-        frame.userData.restPos  = restPos.clone();
-        frame.userData.normal   = norm.clone();
-        frame.visible           = false;
-        frame.castShadow        = true;
-        this.#grp.add(frame);
-
-        // Painel solar (face alinhada ao telhado)
-        const panel = new THREE.Mesh(
-          new THREE.PlaneGeometry(1.06, 1.68),
-          panelMat
-        );
-        panel.position.copy(restPos);
-        panel.lookAt(restPos.clone().add(norm));
-        panel.userData.restPos  = restPos.clone();
-        panel.userData.normal   = norm.clone();
-        panel.userData.frame    = frame;
-        panel.visible           = false;
-        panel.castShadow        = true;
-        this.#grp.add(panel);
-        this.panels.push(panel);
-      }
-    }
-  }
-
-  static #panelMat() {
-    const c = document.createElement('canvas');
-    c.width = 512; c.height = 512;
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = '#101828';
-    ctx.fillRect(0, 0, 512, 512);
-    const cols = 6, rows = 6;
-    const cw = 512 / cols - 3, ch = 512 / rows - 3;
-    for (let r = 0; r < rows; r++) {
-      for (let co = 0; co < cols; co++) {
-        const cx = co * (512 / cols) + 1.5;
-        const cy = r  * (512 / rows) + 1.5;
-        const g = ctx.createLinearGradient(cx, cy, cx + cw, cy + ch);
-        g.addColorStop(0,   '#1e3464');
-        g.addColorStop(0.5, '#162a58');
-        g.addColorStop(1,   '#0e1e44');
-        ctx.fillStyle = g;
-        ctx.fillRect(cx, cy, cw, ch);
-        ctx.strokeStyle = '#0a1020';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(cx, cy, cw, ch);
-        ctx.strokeStyle = 'rgba(160,190,220,0.28)';
-        ctx.lineWidth = 0.6;
-        for (let f = 1; f < 5; f++) {
-          ctx.beginPath();
-          ctx.moveTo(cx, cy + ch * f / 5);
-          ctx.lineTo(cx + cw, cy + ch * f / 5);
-          ctx.stroke();
-        }
-      }
-    }
-    ctx.strokeStyle = 'rgba(60,90,140,0.9)';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(1, 1, 510, 510);
-    return new THREE.MeshStandardMaterial({
-      map: new THREE.CanvasTexture(c),
-      roughness: 0.12,
-      metalness: 0.52,
-      side: THREE.DoubleSide,
-    });
-  }
-}
-
-/* ─────────────────────────────────────────────────────────────────────
-   CameraController — gerencia posição e lookAt por fase com lerp suave
-   Fase 0/4: órbita 360° | 1/3: foca no telhado esq. | 2: foca no inversor
-   ───────────────────────────────────────────────────────────────────── */
-class CameraController {
-  #cam;
-  #theta   = Math.PI * 1.15;   // ângulo inicial ≈ posição padrão (-10, 10, -20)
-  #curPos  = new THREE.Vector3();
-  #curLook = new THREE.Vector3();
-  #tgtPos  = new THREE.Vector3();
-  #tgtLook = new THREE.Vector3();
-
-  constructor(camera) {
-    this.#cam = camera;
-    this.#curPos.copy(camera.position);
-    this.#tgtPos.copy(camera.position);
-    this.#curLook.set(0, CASA.FH + CASA.H * 0.5, 0);
-    this.#tgtLook.copy(this.#curLook);
-  }
-
-  update(dt, phase) {
-    const { W, D, H, FH, RA } = CASA;
-
-    if (phase === 0 || phase === 4) {
-      this.#theta += dt * 0.38;
-      this.#tgtPos.set(Math.sin(this.#theta) * 22, 10, Math.cos(this.#theta) * 22);
-      this.#tgtLook.set(0, FH + H * 0.5, 0);
-    } else if (phase === 1 || phase === 3) {
-      this.#tgtPos.set(-18, 14, -5);
-      this.#tgtLook.set(-W * 0.28, FH + H + RA * 0.55, 0);
-    } else if (phase === 2) {
-      this.#tgtPos.set(W + 5, 8, -D / 2 - 3);
-      this.#tgtLook.set(W / 2, FH + H * 0.48, -D * 0.26);
-    }
-
-    const f = Math.min(dt * 1.8, 1.0);
-    this.#curPos.lerp(this.#tgtPos, f);
-    this.#curLook.lerp(this.#tgtLook, f);
-    this.#cam.position.copy(this.#curPos);
-    this.#cam.lookAt(this.#curLook);
-  }
-}
-
-/* ─────────────────────────────────────────────────────────────────────
-   AnimationSequencer — gerencia as 5 fases da animação (loop de 30s)
-   0 ORBIT_INTRO (0–4s) | 1 RACKING (4–12s) | 2 INVERTER (12–16s)
-   3 PANELS (16–28s)    | 4 COMPLETE (28–30s) → reset e loop
-   ───────────────────────────────────────────────────────────────────── */
-class AnimationSequencer {
-  #elapsed = 0;
-  #phase   = 0;
-  #racking;
-  #inverter;
-  #panels;
-
-  static #T = [0, 4, 12, 16, 28, 30];
-
-  constructor(racking, inverter, solarArray) {
-    this.#racking  = racking;
-    this.#inverter = inverter;
-    this.#panels   = solarArray;
-  }
-
-  get phase()   { return this.#phase; }
-  get elapsed() { return this.#elapsed; }
-
-  static easeOutCubic(t)  { return 1 - Math.pow(1 - Math.min(t, 1), 3); }
-  static easeOutBounce(t) {
-    t = Math.min(t, 1);
-    const n1 = 7.5625, d1 = 2.75;
-    if (t < 1 / d1)        return n1 * t * t;
-    if (t < 2 / d1)        return n1 * (t -= 1.5  / d1) * t + 0.75;
-    if (t < 2.5 / d1)      return n1 * (t -= 2.25 / d1) * t + 0.9375;
-    return n1 * (t -= 2.625 / d1) * t + 0.984375;
-  }
-
-  update(dt) {
-    this.#elapsed += dt;
-    if (this.#elapsed >= 30) { this.reset(); return; }
-
-    const T = AnimationSequencer.#T;
-    const e = this.#elapsed;
-    for (let i = T.length - 2; i >= 0; i--) {
-      if (e >= T[i]) { this.#phase = i; break; }
-    }
-
-    const lt = e - T[this.#phase];
-    if (this.#phase === 1) this.#stepRacking(lt);
-    if (this.#phase === 2) this.#stepInverter(lt);
-    if (this.#phase === 3) this.#stepPanels(lt);
-  }
-
-  #stepRacking(lt) {
-    const meshes  = this.#racking.meshes;
-    const count   = Math.min(Math.floor(lt / 1.1) + 1, meshes.length);
-    for (let i = 0; i < meshes.length; i++) {
-      const m = meshes[i];
-      if (i >= count) continue;
-      m.visible = true;
-      const barT = lt - i * 1.1;
-      if (barT < 0.6) {
-        // Queda ao longo da normal do telhado: desloca na direção oposta à normal
-        const f      = AnimationSequencer.easeOutBounce(barT / 0.6);
-        const offset = (1 - f) * 4.0;  // distância acima da posição final ao longo da normal
-        const n      = m.userData.normal;
-        const rp     = m.userData.restPos;
-        m.position.set(
-          rp.x + n.x * offset,
-          rp.y + n.y * offset,
-          rp.z + n.z * offset
-        );
-      } else {
-        m.position.copy(m.userData.restPos);
-      }
-    }
-  }
-
-  #stepInverter(lt) {
-    this.#inverter.mesh.visible = true;
-    if (this.#inverter.mesh.userData.led) {
-      this.#inverter.mesh.userData.led.visible = true;
-    }
-    if (lt > 0.8) {
-      this.#inverter.cable1.visible = true;
-      const idx    = this.#inverter.cable1.geometry.index;
-      const maxIdx = idx ? idx.count : this.#inverter.cable1.geometry.attributes.position.count;
-      const t = Math.min((lt - 0.8) / 3.0, 1.0);
-      this.#inverter.cable1.geometry.setDrawRange(
-        0, Math.floor(AnimationSequencer.easeOutCubic(t) * maxIdx)
-      );
-    }
-  }
-
-  #stepPanels(lt) {
-    const panels  = this.#panels.panels;
-    const count   = Math.min(Math.floor(lt / 1.0) + 1, panels.length);
-    for (let i = 0; i < panels.length; i++) {
-      const p = panels[i];
-      if (i >= count) continue;
-      p.visible = true;
-      if (p.userData.frame) p.userData.frame.visible = true;
-      const pT = lt - i * 1.0;
-      if (pT < 0.6) {
-        // Queda ao longo da normal: painel desce perpendicularmente ao telhado
-        const f      = AnimationSequencer.easeOutBounce(pT / 0.6);
-        const offset = (1 - f) * 5.0;
-        const n      = p.userData.normal;
-        const rp     = p.userData.restPos;
-        const nx = rp.x + n.x * offset;
-        const ny = rp.y + n.y * offset;
-        const nz = rp.z + n.z * offset;
-        p.position.set(nx, ny, nz);
-        if (p.userData.frame) {
-          const frp = p.userData.frame.userData.restPos;
-          p.userData.frame.position.set(
-            frp.x + n.x * offset,
-            frp.y + n.y * offset,
-            frp.z + n.z * offset
-          );
-        }
-      } else {
-        p.position.copy(p.userData.restPos);
-        if (p.userData.frame) p.userData.frame.position.copy(p.userData.frame.userData.restPos);
-      }
-    }
-  }
-
-  reset() {
-    this.#elapsed = 0;
-    this.#phase   = 0;
-    for (const m of this.#racking.meshes) {
-      m.visible = false;
-      m.position.copy(m.userData.restPos);
-    }
-    this.#inverter.mesh.visible = false;
-    if (this.#inverter.mesh.userData.led) {
-      this.#inverter.mesh.userData.led.visible = false;
-    }
-    this.#inverter.cable1.visible = false;
-    this.#inverter.cable1.geometry.setDrawRange(0, 0);
-    for (const p of this.#panels.panels) {
-      p.visible = false;
-      p.position.copy(p.userData.restPos);
-      if (p.userData.frame) {
-        p.userData.frame.visible = false;
-        p.userData.frame.position.copy(p.userData.frame.userData.restPos);
-      }
-    }
-  }
-}
-
-/* ─────────────────────────────────────────────────────────────────────
    HouseBuilder — orquestra todos os módulos da casa
    ───────────────────────────────────────────────────────────────────── */
 class HouseBuilder {
   #scene;
   #grp;
-
-  roof1Center  = new THREE.Vector3();
-  roof2Center  = new THREE.Vector3();
-  poleTop      = new THREE.Vector3();
-  racking      = null;
-  inverter     = null;
-  solarPanels  = null;
 
   constructor(scene) {
     this.#scene = scene;
@@ -1227,12 +785,7 @@ class HouseBuilder {
     scene.add(this.#grp);
   }
 
-  static roofY(xWorld)                    { return Roof.roofY(xWorld); }
-  static roofPoint(x, z, normalOffset = 0) { return Roof.roofPoint(x, z, normalOffset); }
-
   build() {
-    const { W, FH, H, RA } = CASA;
-
     new Ground(this.#grp);
     new Foundation(this.#grp);
     new Walls(this.#grp);
@@ -1241,15 +794,7 @@ class HouseBuilder {
     new Door(this.#grp);
     new Chimney(this.#grp);
     new Garden(this.#grp);
-    const pole = new Pole(this.#grp);
-
-    this.racking     = new RackingStructure(this.#grp);
-    this.inverter    = new Inverter(this.#grp);
-    this.solarPanels = new SolarPanelArray(this.#grp);
-
-    this.roof1Center.set(-W / 4, FH + H + RA * 0.5, 0);
-    this.roof2Center.set( W / 4, FH + H + RA * 0.5, 0);
-    this.poleTop.copy(pole.poleTop);
+    new Pole(this.#grp);
   }
 }
 
@@ -1335,15 +880,12 @@ class SceneManager {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   AnimacaoMontagem — fachada pública + RAF loop
+   AnimacaoMontagem — fachada pública
    API: constructor(canvas) · iniciar() · reiniciar() · parar()
    ───────────────────────────────────────────────────────────────────── */
 class AnimacaoMontagem {
-  #sm       = null;
-  #raf      = null;
-  #seq      = null;
-  #cam      = null;
-  #lastTime = 0;
+  #sm  = null;
+  #raf = null;
 
   constructor(canvasEl) {
     if (typeof THREE === 'undefined') {
@@ -1353,33 +895,16 @@ class AnimacaoMontagem {
     this.#sm = new SceneManager(canvasEl);
     const house = new HouseBuilder(this.#sm.scene);
     house.build();
-    this.#seq = new AnimationSequencer(house.racking, house.inverter, house.solarPanels);
-    this.#cam = new CameraController(this.#sm.camera);
     requestAnimationFrame(() => this.iniciar());
-  }
-
-  #tick(now) {
-    if (!this.#sm || !this.#seq || !this.#cam) return;
-    this.#raf = requestAnimationFrame((t) => this.#tick(t));
-    const dt = Math.min((now - this.#lastTime) / 1000, 0.1);
-    this.#lastTime = now;
-    if (dt <= 0) return;
-    this.#seq.update(dt);
-    this.#cam.update(dt, this.#seq.phase);
-    this.#sm.render();
   }
 
   iniciar() {
     if (!this.#sm) return;
     this.parar();
-    this.#lastTime = performance.now();
-    this.#raf = requestAnimationFrame((t) => this.#tick(t));
+    this.#sm.render();
   }
 
-  reiniciar() {
-    if (this.#seq) this.#seq.reset();
-    this.iniciar();
-  }
+  reiniciar() { this.iniciar(); }
 
   parar() {
     if (this.#raf) { cancelAnimationFrame(this.#raf); this.#raf = null; }

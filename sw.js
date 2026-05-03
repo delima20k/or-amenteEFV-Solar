@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'efv-solar-v8';
+const CACHE_NAME = 'efv-solar-v9';
 
 const ASSETS_PARA_CACHE = [
   './',
