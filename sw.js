@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'efv-solar-v7';
+const CACHE_NAME = 'efv-solar-v8';
 
 const ASSETS_PARA_CACHE = [
   './',
@@ -10,6 +10,7 @@ const ASSETS_PARA_CACHE = [
   './solar-animation.js',
   './manifest.json',
   './assets/efv_solar.png',
+  './assets/efv_solar_logo.png',
   './assets/icon.svg',
   './assets/three.min.js',
 ];

@@ -866,7 +866,8 @@ class Inverter {
       new THREE.MeshStandardMaterial({ color: 0x00ff60, emissive: new THREE.Color(0x00ff60), emissiveIntensity: 1.2 })
     );
     led.position.set(W / 2 + WT + 0.05, FH + H * 0.46 + 0.18, -D * 0.26);
-    led.rotation.y = Math.PI / 2;
+    led.rotation.y  = Math.PI / 2;
+    led.visible     = false;
     this.mesh.userData.led = led;
     this.#grp.add(led);
 
@@ -1104,7 +1105,8 @@ class AnimationSequencer {
     }
     if (lt > 0.8) {
       this.#inverter.cable1.visible = true;
-      const maxIdx = this.#inverter.cable1.geometry.index.count;
+      const idx    = this.#inverter.cable1.geometry.index;
+      const maxIdx = idx ? idx.count : this.#inverter.cable1.geometry.attributes.position.count;
       const t = Math.min((lt - 0.8) / 3.0, 1.0);
       this.#inverter.cable1.geometry.setDrawRange(
         0, Math.floor(AnimationSequencer.easeOutCubic(t) * maxIdx)
@@ -1313,7 +1315,7 @@ class AnimacaoMontagem {
   }
 
   #tick(now) {
-    if (!this.#sm) return;
+    if (!this.#sm || !this.#seq || !this.#cam) return;
     this.#raf = requestAnimationFrame((t) => this.#tick(t));
     const dt = Math.min((now - this.#lastTime) / 1000, 0.1);
     this.#lastTime = now;
