@@ -692,10 +692,16 @@ class PwaInstallController {
       }
     });
 
-    this.#btnDismiss.addEventListener('click', () => {
+    this.#btnDismiss.addEventListener('click', () => this.#dispensar());
+  }
+
+  #dispensar() {
+    this.#banner.classList.add('pwa-banner--saindo');
+    this.#banner.addEventListener('animationend', () => {
       this.#banner.hidden = true;
+      this.#banner.classList.remove('pwa-banner--saindo');
       localStorage.setItem(PwaInstallController.#DISMISSED_KEY, '1');
-    });
+    }, { once: true });
   }
 }
 

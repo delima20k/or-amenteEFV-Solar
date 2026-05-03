@@ -1603,6 +1603,15 @@ body {
 }
 .pwa-dismiss-btn:hover { border-color: rgba(255,255,255,.5); color: var(--white); }
 
+@keyframes pwa-slide-down {
+  from { opacity: 1; transform: translateX(-50%) translateY(0);      }
+  to   { opacity: 0; transform: translateX(-50%) translateY(140px);  }
+}
+.pwa-banner--saindo {
+  animation: pwa-slide-down .38s cubic-bezier(.55, 0, 1, .45) both;
+  pointer-events: none;
+}
+
 /* ===================================================
    TELA HOME — ANIMAÇÃO SOLAR
    =================================================== */
