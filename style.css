@@ -648,52 +648,34 @@ body {
 .calc-dot--gold  { background: var(--gold); }
 .calc-dot--green { background: #22c55e; }
 
-/* ===== CALCULADORA — INPUT CONTA ===== */
-.calc-conta-group {
+/* ===== CALCULADORA — DISPLAY CONTA (automático) ===== */
+.calc-conta-display-wrap {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  justify-content: center;
   gap: 6px;
-  margin-bottom: 4px;
+  padding: 14px 0 6px;
 }
-.calc-conta-input-wrap {
-  display: flex;
-  align-items: center;
-  background: var(--gray-100);
-  border: 2px solid var(--gray-300);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  transition: border-color var(--transition);
-}
-.calc-conta-input-wrap:focus-within {
-  border-color: var(--gold);
-}
-.calc-conta-prefix {
-  padding: 10px 12px;
+.calc-conta-currency {
+  color: var(--gold);
+  font-size: 1.3rem;
   font-weight: 700;
-  color: var(--gray-700);
-  font-size: 1rem;
-  background: var(--gray-200);
-  border-right: 1.5px solid var(--gray-300);
-  flex-shrink: 0;
+  letter-spacing: 1px;
 }
-.calc-conta-input {
-  border: none;
-  outline: none;
-  background: transparent;
-  padding: 10px 12px;
-  font-size: 1rem;
-  font-family: inherit;
-  color: var(--dark);
-  width: 100%;
-  -moz-appearance: textfield;
+.calc-conta-valor {
+  color: var(--white);
+  font-size: 2.4rem;
+  font-weight: 800;
+  letter-spacing: -1px;
+  transition: color .2s;
+  font-variant-numeric: tabular-nums;
 }
-.calc-conta-input::-webkit-outer-spin-button,
-.calc-conta-input::-webkit-inner-spin-button { -webkit-appearance: none; }
-.calc-conta-hint {
-  font-size: 0.75rem;
-  color: var(--gray-500);
-  line-height: 1.4;
+.calc-conta-period {
+  color: rgba(255,255,255,.45);
+  font-size: .9rem;
+  font-weight: 500;
 }
+
 
 /* ===== CALCULADORA — KPI RESULTADO ===== */
 .calc-kpi-row {

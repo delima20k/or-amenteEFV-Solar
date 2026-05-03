@@ -380,7 +380,7 @@ class CalculadoraController {
   #sliderAnos;
   #displayConsumo;
   #displayAnos;
-  #inputConta;
+  #displayConta;
   #btnMenos;
   #btnMais;
   #btnAnosMenos;
@@ -404,7 +404,7 @@ class CalculadoraController {
     this.#sliderAnos      = document.getElementById('slider-anos');
     this.#displayConsumo  = document.getElementById('valor-consumo');
     this.#displayAnos     = document.getElementById('valor-anos');
-    this.#inputConta      = document.getElementById('input-conta');
+    this.#displayConta    = document.getElementById('display-conta');
     this.#btnMenos        = document.getElementById('btn-menos');
     this.#btnMais         = document.getElementById('btn-mais');
     this.#btnAnosMenos    = document.getElementById('btn-anos-menos');
@@ -424,13 +424,15 @@ class CalculadoraController {
     this.#bind();
     this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
     this.#syncSliderAnos();
-    this.#atualizarPreviewFatura();
+    this.#atualizarConta();
     this.#carregarTarifa();
   }
 
   async #carregarTarifa() {
     const { valor, fonte } = await TarifaService.obter();
     CalculadoraController.#TARIFA_KWH = valor;
+    this.#atualizarConta();
+    this.#atualizarPreviewFatura();
     if (this.#tarifaDisplay) {
       this.#tarifaDisplay.innerHTML =
         TarifaService.formatar(valor).replace('R$ ', 'R$ ') +
@@ -445,8 +447,8 @@ class CalculadoraController {
 
   #bind() {
     this.#slider.addEventListener('input', () => {
-      this.#inputConta.value = '';
       this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
+      this.#atualizarConta();
       this.#atualizarPreviewFatura();
       this.#dispararRaios(this.#lightningConsumo);
     });
@@ -457,15 +459,15 @@ class CalculadoraController {
 
     this.#btnMenos.addEventListener('click', () => {
       this.#slider.value = Math.max(50, +this.#slider.value - 10);
-      this.#inputConta.value = '';
       this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
+      this.#atualizarConta();
       this.#atualizarPreviewFatura();
       this.#dispararRaios(this.#lightningConsumo);
     });
     this.#btnMais.addEventListener('click', () => {
       this.#slider.value = Math.min(2000, +this.#slider.value + 10);
-      this.#inputConta.value = '';
       this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
+      this.#atualizarConta();
       this.#atualizarPreviewFatura();
       this.#dispararRaios(this.#lightningConsumo);
     });
@@ -478,16 +480,6 @@ class CalculadoraController {
       this.#sliderAnos.value = Math.min(40, +this.#sliderAnos.value + 1);
       this.#syncSliderAnos();
       this.#dispararRaios(this.#lightningAnos);
-    });
-
-    this.#inputConta.addEventListener('input', () => {
-      const val = parseFloat(this.#inputConta.value);
-      if (!isNaN(val) && val > 0) {
-        const c = Math.round(val / CalculadoraController.#TARIFA_KWH / 10) * 10;
-        this.#slider.value = Math.min(2000, Math.max(50, c));
-        this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
-        this.#atualizarPreviewFatura();
-      }
     });
 
     this.#btnCalc.addEventListener('click', () => this.#calcular());
@@ -511,6 +503,13 @@ class CalculadoraController {
     if (this.#thumbAnosWrap)  this.#thumbAnosWrap.style.left  = pct + '%';
     this.#sliderAnos.style.setProperty('--slider-pct', pct.toFixed(1) + '%');
     if (this.#displayAnos) this.#displayAnos.textContent = v;
+  }
+
+  #atualizarConta() {
+    if (!this.#displayConta) return;
+    const consumo = +this.#slider.value;
+    const fatura  = consumo * CalculadoraController.#TARIFA_KWH;
+    this.#displayConta.textContent = fatura.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   #atualizarPreviewFatura() {
