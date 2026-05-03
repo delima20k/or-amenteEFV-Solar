@@ -11,6 +11,12 @@
   "categories": ["business", "utilities"],
   "icons": [
     {
+      "src": "./assets/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
       "src": "./assets/efv_solar.png",
       "sizes": "any",
       "type": "image/png",

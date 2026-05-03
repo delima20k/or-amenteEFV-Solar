@@ -649,6 +649,7 @@ class CalculadoraController {
    INSTALAÇÃO PWA (banner "Adicionar à tela inicial")
    =================================================== */
 class PwaInstallController {
+  static #DISMISSED_KEY = 'efv_pwa_dismissed';
   #deferredPrompt = null;
   #banner;
   #btnInstall;
@@ -662,6 +663,12 @@ class PwaInstallController {
   }
 
   #bind() {
+    /* Não mostrar se app já instalado (modo standalone) ou usuário já dispensou */
+    const jaInstalado = window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+    const jaDispensado = !!localStorage.getItem(PwaInstallController.#DISMISSED_KEY);
+    if (jaInstalado || jaDispensado) return;
+
     window.addEventListener('beforeinstallprompt', e => {
       e.preventDefault();
       this.#deferredPrompt = e;
@@ -671,6 +678,7 @@ class PwaInstallController {
     window.addEventListener('appinstalled', () => {
       this.#banner.hidden = true;
       this.#deferredPrompt = null;
+      localStorage.setItem(PwaInstallController.#DISMISSED_KEY, '1');
     });
 
     this.#btnInstall.addEventListener('click', async () => {
@@ -679,10 +687,14 @@ class PwaInstallController {
       const { outcome } = await this.#deferredPrompt.userChoice;
       this.#deferredPrompt = null;
       this.#banner.hidden = true;
+      if (outcome === 'accepted') {
+        localStorage.setItem(PwaInstallController.#DISMISSED_KEY, '1');
+      }
     });
 
     this.#btnDismiss.addEventListener('click', () => {
       this.#banner.hidden = true;
+      localStorage.setItem(PwaInstallController.#DISMISSED_KEY, '1');
     });
   }
 }
@@ -794,15 +806,13 @@ class ShareController {
   }
 
   #baixarPDF() {
+    /* Usa o dialogo de impressão nativo para salvar como PDF — funciona offline */
     if (!this.#htmlAtual) return;
-    const blob = new Blob([this.#htmlAtual], { type: 'text/html;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = 'orcamento-efv-solar.html';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+    const win = window.open('', '_blank');
+    if (!win) { alert('Permita pop-ups para salvar o PDF.'); return; }
+    win.document.write(this.#htmlAtual);
+    win.document.close();
+    win.addEventListener('load', () => setTimeout(() => win.print(), 400));
   }
 }
 
@@ -1056,11 +1066,12 @@ class PrintBuilder {
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Orçamento EFV Solar — ${date}</title>
   <style>
     @page {
       size: A4 portrait;
-      margin: 1.8cm 1.5cm 1.8cm 1.5cm;
+      margin: 1.6cm 1.4cm 1.8cm 1.4cm;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1080,14 +1091,30 @@ class PrintBuilder {
       background: #fff;
     }
 
+    /* ---- BANNER INSTRUÇÃO (apenas tela, oculto na impressão) ---- */
+    .pdf-instrucao {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #fffbeb;
+      border: 1.5px solid #FFB800;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 18px;
+      font-size: 13px;
+      color: #6B4F00;
+    }
+    .pdf-instrucao-icon { font-size: 22px; flex-shrink: 0; }
+    .pdf-instrucao strong { color: #111; }
+
     /* ---- MARCA D'ÁGUA ---- */
     .marca-dagua {
       position: fixed;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: 60%;
-      opacity: 0.06;
+      width: 65%;
+      opacity: 0.10;
       z-index: 0;
       pointer-events: none;
       background-repeat: no-repeat;
@@ -1110,8 +1137,8 @@ class PrintBuilder {
       margin-bottom: 20px;
     }
     .logo-header {
-      width: 64px;
-      height: 64px;
+      width: 68px;
+      height: 68px;
       object-fit: contain;
       flex-shrink: 0;
     }
@@ -1181,9 +1208,11 @@ class PrintBuilder {
       display: flex;
       gap: 10px;
       margin-bottom: 14px;
+      flex-wrap: wrap;
     }
     .calc-kpi-pdf-item {
       flex: 1;
+      min-width: 120px;
       background: var(--dark);
       color: #fff;
       border-radius: 6px;
@@ -1263,29 +1292,57 @@ class PrintBuilder {
     }
     .info-profissional strong { color: #111; }
 
-    /* ---- RESPONSIVO (celular antes de imprimir) ---- */
-    @media screen and (max-width: 600px) {
-      body { font-size: 13px; padding: 12px; }
+    /* ---- RESPONSIVO CELULAR (visualização na tela) ---- */
+    @media screen and (max-width: 640px) {
+      html, body { font-size: 14px; }
+      body { padding: 12px; }
       .cabecalho { flex-direction: column; align-items: flex-start; gap: 8px; }
-      .logo-header { width: 48px; height: 48px; }
-      .cabecalho-texto h1 { font-size: 18pt; }
+      .logo-header { width: 52px; height: 52px; }
+      .cabecalho-texto h1 { font-size: 20pt; letter-spacing: 2px; }
+      /* Tabela vira lista vertical no celular */
+      .tabela-dados,
+      .tabela-dados tbody,
+      .tabela-dados tr,
       .tabela-dados td { display: block; width: 100%; }
-      .label-cell { border-right: none; border-bottom: none; padding-bottom: 2px; }
-      .value-cell { padding-top: 0; }
-      .calc-kpi-pdf { flex-wrap: wrap; }
+      .tabela-dados tr { border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+      .tabela-dados tr:last-child { border-bottom: none; }
+      .label-cell {
+        border-right: none;
+        border-bottom: none;
+        padding-bottom: 2px;
+        font-size: 11px;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .value-cell { padding-top: 0; font-size: 15px; font-weight: 600; }
       .calc-kpi-pdf-item { min-width: calc(50% - 5px); }
-      .rodape { flex-direction: column; align-items: flex-start; gap: 8px; }
+      .rodape { flex-direction: column; align-items: flex-start; gap: 10px; }
       .info-profissional { text-align: left; }
     }
 
+    /* ---- IMPRESSÃO A4 ---- */
     @media print {
-      body { font-size: 10.5pt; }
+      html, body { font-size: 10.5pt; background: #fff; }
+      .pdf-instrucao { display: none; }
       .marca-dagua { display: block; }
+      /* Garantir que a tabela fique em formato coluna no A4 */
+      .tabela-dados td { display: table-cell; }
+      .tabela-dados tr { display: table-row; }
+      .tabela-dados tbody { display: table-row-group; }
+      .tabela-dados { display: table; }
     }
   </style>
 </head>
 <body>
   ${marcaDagua}
+
+  <div class="pdf-instrucao" role="note">
+    <span class="pdf-instrucao-icon">🖨️</span>
+    <span>Para <strong>salvar como PDF</strong>: no diálogo de impressão, escolha o destino
+    <strong>"Salvar como PDF"</strong>. Para <strong>imprimir</strong>: selecione a impressora.</span>
+  </div>
+
   <div class="conteudo">
 
     <header class="cabecalho">

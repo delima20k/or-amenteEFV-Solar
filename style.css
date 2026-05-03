@@ -60,11 +60,11 @@ body {
 }
 
 .header-logo {
-  width: 52px;
-  height: 52px;
+  width: 72px;
+  height: 72px;
   object-fit: contain;
   flex-shrink: 0;
-  filter: drop-shadow(0 0 8px rgba(255, 184, 0, 0.35));
+  filter: drop-shadow(0 0 10px rgba(255, 184, 0, 0.4));
 }
 
 .header-titles {
@@ -1485,7 +1485,7 @@ body {
 
 @media (min-width: 640px) {
   .header-title { font-size: 2.2rem; }
-  .header-logo  { width: 60px; height: 60px; }
+  .header-logo  { width: 78px; height: 78px; }
   .form-card    { padding: 36px 32px; }
   .main-content { padding: 32px 24px 90px; }
   .calc-res-grid { grid-template-columns: repeat(3, 1fr); }
@@ -1494,7 +1494,7 @@ body {
 
 @media (max-width: 420px) {
   .header-title  { font-size: 1.5rem; letter-spacing: 2px; }
-  .header-logo   { width: 42px; height: 42px; }
+  .header-logo   { width: 56px; height: 56px; }
   .form-card     { padding: 18px 14px; }
   .form-actions  { flex-direction: column; }
   .btn-secondary { text-align: center; }

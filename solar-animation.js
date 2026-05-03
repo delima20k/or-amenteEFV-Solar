@@ -138,14 +138,14 @@ class AnimacaoMontagem {
   get ctx() { return this.#ctx; }
 
   /* ================================================================
-     CENÁRIO BASE
+     CENÁRIO BASE — casa 3D com telhado realista
   ================================================================ */
   #desenharCenario() {
     const ctx = this.#ctx;
     const g   = this.#geo;
     const { W, H } = g;
 
-    /* CÉU */
+    /* ===== CÉU ===== */
     const ceu = ctx.createLinearGradient(0, 0, 0, H * 0.72);
     ceu.addColorStop(0,   '#0a0e1a');
     ceu.addColorStop(0.5, '#0d1b35');
@@ -158,7 +158,7 @@ class AnimacaoMontagem {
       ctx.beginPath(); ctx.arc(sx, sy, 0.9, 0, Math.PI * 2); ctx.fill();
     }
 
-    /* SOL */
+    /* ===== SOL ===== */
     const solGrad = ctx.createRadialGradient(g.solX, g.solY, 0, g.solX, g.solY, g.solR);
     solGrad.addColorStop(0,   '#fff8e1');
     solGrad.addColorStop(0.4, '#FFE066');
@@ -166,7 +166,7 @@ class AnimacaoMontagem {
     ctx.fillStyle = solGrad;
     ctx.beginPath(); ctx.arc(g.solX, g.solY, g.solR, 0, Math.PI * 2); ctx.fill();
 
-    /* CHÃO — estende para baixo para o pan */
+    /* ===== CHÃO ===== */
     const gram = ctx.createLinearGradient(0, H * 0.72, 0, H + g.panDelta + 20);
     gram.addColorStop(0, '#2d5a27'); gram.addColorStop(1, '#1a3a16');
     ctx.fillStyle = gram;
@@ -174,41 +174,234 @@ class AnimacaoMontagem {
     ctx.strokeStyle = '#3d7a35'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(0, H * 0.72); ctx.lineTo(W, H * 0.72); ctx.stroke();
 
-    /* PAREDE — estende para baixo */
-    const paredeGrad = ctx.createLinearGradient(g.casaX, g.casaYtopo, g.casaX + g.casaW, g.casaYtopo);
-    paredeGrad.addColorStop(0, '#e8e0d0'); paredeGrad.addColorStop(0.5, '#f5f0e8'); paredeGrad.addColorStop(1, '#d4ccc0');
-    ctx.fillStyle = paredeGrad;
-    ctx.fillRect(g.casaX, g.casaYtopo, g.casaW, g.casaH + g.panDelta + 20);
-    ctx.strokeStyle = '#bbb4a8'; ctx.lineWidth = 1;
-    ctx.strokeRect(g.casaX, g.casaYtopo, g.casaW, g.casaH + g.panDelta + 20);
+    /* Sombra projetada da casa no chão */
+    const sombraGrd = ctx.createLinearGradient(
+      0, g.casaYtopo + g.casaH, 0, g.casaYtopo + g.casaH + H * 0.04);
+    sombraGrd.addColorStop(0, 'rgba(0,0,0,0.22)');
+    sombraGrd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sombraGrd;
+    ctx.fillRect(g.casaX + g.profX, g.casaYtopo + g.casaH,
+                 g.casaW + g.profX, H * 0.04);
 
-    /* JANELA */
-    ctx.fillStyle = '#6ea8c8';
-    ctx.fillRect(g.janelaX, g.janelaY, g.janelaW, g.janelaH);
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
-    ctx.strokeRect(g.janelaX, g.janelaY, g.janelaW, g.janelaH);
+    /* ===== CASA — FACE LATERAL DIREITA (profundidade 3D) ===== */
+    const { profX, profY, casaX, casaYtopo, casaW, casaH, panDelta } = g;
+    const sideWallGrd = ctx.createLinearGradient(
+      casaX + casaW, casaYtopo, casaX + casaW + profX, casaYtopo - profY);
+    sideWallGrd.addColorStop(0, '#bfb7a6');
+    sideWallGrd.addColorStop(1, '#908880');
+    ctx.fillStyle = sideWallGrd;
     ctx.beginPath();
-    ctx.moveTo(g.janelaX + g.janelaW / 2, g.janelaY); ctx.lineTo(g.janelaX + g.janelaW / 2, g.janelaY + g.janelaH);
-    ctx.moveTo(g.janelaX, g.janelaY + g.janelaH / 2); ctx.lineTo(g.janelaX + g.janelaW, g.janelaY + g.janelaH / 2);
+    ctx.moveTo(casaX + casaW,         casaYtopo);
+    ctx.lineTo(casaX + casaW + profX, casaYtopo - profY);
+    ctx.lineTo(casaX + casaW + profX, casaYtopo - profY + casaH + panDelta + 20);
+    ctx.lineTo(casaX + casaW,         casaYtopo + casaH + panDelta + 20);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1; ctx.stroke();
+
+    /* ===== CASA — FACE FRONTAL ===== */
+    const paredeGrd = ctx.createLinearGradient(casaX, casaYtopo, casaX + casaW, casaYtopo);
+    paredeGrd.addColorStop(0,   '#e8e0d0');
+    paredeGrd.addColorStop(0.5, '#f5f0e8');
+    paredeGrd.addColorStop(1,   '#d4ccc0');
+    ctx.fillStyle = paredeGrd;
+    ctx.fillRect(casaX, casaYtopo, casaW, casaH + panDelta + 20);
+
+    /* Textura tijolo — linhas horizontais + verticais alternadas */
+    const brickH = Math.max(6, casaH / 9);
+    const brickW = casaW / 6;
+    ctx.strokeStyle = 'rgba(0,0,0,0.07)'; ctx.lineWidth = 0.7;
+    for (let r = 0; r <= 9; r++) {
+      const by = casaYtopo + r * brickH;
+      ctx.beginPath(); ctx.moveTo(casaX, by); ctx.lineTo(casaX + casaW, by); ctx.stroke();
+      const off = (r % 2) * (brickW / 2);
+      for (let c = 1; c <= 6; c++) {
+        const bx = casaX + c * brickW - off;
+        if (bx > casaX + 2 && bx < casaX + casaW - 2) {
+          ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx, by + brickH); ctx.stroke();
+        }
+      }
+    }
+    ctx.strokeStyle = '#bbb4a8'; ctx.lineWidth = 1;
+    ctx.strokeRect(casaX, casaYtopo, casaW, casaH + panDelta + 20);
+
+    /* ===== JANELA ===== */
+    const { janelaX, janelaY, janelaW: jW, janelaH: jH } = g;
+    /* Sombra */
+    ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
+    ctx.fillStyle = '#6ea8c8';
+    ctx.fillRect(janelaX, janelaY, jW, jH);
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(janelaX, janelaY, jW, jH);
+    /* Divisórias */
+    ctx.beginPath();
+    ctx.moveTo(janelaX + jW / 2, janelaY); ctx.lineTo(janelaX + jW / 2, janelaY + jH);
+    ctx.moveTo(janelaX, janelaY + jH / 2); ctx.lineTo(janelaX + jW, janelaY + jH / 2);
+    ctx.stroke();
+    /* Reflexo diagonal */
+    const reflGrd = ctx.createLinearGradient(
+      janelaX, janelaY, janelaX + jW * 0.42, janelaY + jH * 0.42);
+    reflGrd.addColorStop(0, 'rgba(255,255,255,0.3)');
+    reflGrd.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = reflGrd;
+    ctx.fillRect(janelaX, janelaY, jW, jH);
+    /* Peitoril */
+    ctx.fillStyle = '#cec5b5';
+    ctx.fillRect(janelaX - 3, janelaY + jH, jW + 6, 4);
+    ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.8;
+    ctx.strokeRect(janelaX - 3, janelaY + jH, jW + 6, 4);
+
+    /* ===== PORTA ===== */
+    const { doorX, doorY, doorW: dW, doorH: dH } = g;
+    ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 5;
+    ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
+    const portaGrd = ctx.createLinearGradient(doorX, doorY, doorX + dW, doorY);
+    portaGrd.addColorStop(0,   '#8B6520');
+    portaGrd.addColorStop(0.5, '#a07830');
+    portaGrd.addColorStop(1,   '#7a5818');
+    ctx.fillStyle = portaGrd;
+    ctx.beginPath();
+    ctx.moveTo(doorX, doorY + dH);
+    ctx.lineTo(doorX, doorY + dH * 0.28);
+    ctx.arc(doorX + dW / 2, doorY + dH * 0.28, dW / 2, Math.PI, 0, false);
+    ctx.lineTo(doorX + dW, doorY + dH);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = '#5a3c0a'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(doorX, doorY + dH);
+    ctx.lineTo(doorX, doorY + dH * 0.28);
+    ctx.arc(doorX + dW / 2, doorY + dH * 0.28, dW / 2, Math.PI, 0, false);
+    ctx.lineTo(doorX + dW, doorY + dH);
+    ctx.closePath(); ctx.stroke();
+    /* Linha central */
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(doorX + dW / 2, doorY + dH * 0.28);
+    ctx.lineTo(doorX + dW / 2, doorY + dH); ctx.stroke();
+    /* Maçaneta dourada */
+    ctx.fillStyle = '#FFB800';
+    ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 3;
+    ctx.beginPath();
+    ctx.arc(doorX + dW * 0.72, doorY + dH * 0.58, Math.max(2, dW * 0.1), 0, Math.PI * 2);
+    ctx.fill(); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+    /* Soleira */
+    ctx.fillStyle = '#b0a898';
+    ctx.fillRect(doorX - 4, doorY + dH, dW + 8, 5);
+    ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.8;
+    ctx.strokeRect(doorX - 4, doorY + dH, dW + 8, 5);
+
+    /* ===== TELHADO — FACE LATERAL DIREITA ===== */
+    const { telhaX, telhaYbase, telhaApice, telhaW } = g;
+    const sideRoofGrd = ctx.createLinearGradient(
+      telhaX + telhaW, telhaYbase, telhaX + telhaW + profX, telhaYbase - profY);
+    sideRoofGrd.addColorStop(0, '#5a3e0c');
+    sideRoofGrd.addColorStop(1, '#3a2808');
+    ctx.fillStyle = sideRoofGrd;
+    ctx.beginPath();
+    ctx.moveTo(telhaX + telhaW,               telhaYbase);
+    ctx.lineTo(telhaX + telhaW + profX,       telhaYbase - profY);
+    ctx.lineTo(telhaX + telhaW / 2 + profX,   telhaApice - profY);
+    ctx.lineTo(telhaX + telhaW / 2,           telhaApice);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#3a2a06'; ctx.lineWidth = 1; ctx.stroke();
+
+    /* ===== TELHADO — FACE FRONTAL ===== */
+    const telGrd = ctx.createLinearGradient(telhaX, telhaApice, telhaX + telhaW, telhaYbase);
+    telGrd.addColorStop(0,   '#6b4f12');
+    telGrd.addColorStop(0.4, '#8B6914');
+    telGrd.addColorStop(1,   '#5a4010');
+    ctx.fillStyle = telGrd;
+    ctx.beginPath();
+    ctx.moveTo(telhaX, telhaYbase);
+    ctx.lineTo(telhaX + telhaW / 2, telhaApice);
+    ctx.lineTo(telhaX + telhaW, telhaYbase);
+    ctx.closePath(); ctx.fill();
+
+    /* Fileiras de telhas cerâmicas (clipped no triângulo) */
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(telhaX, telhaYbase);
+    ctx.lineTo(telhaX + telhaW / 2, telhaApice);
+    ctx.lineTo(telhaX + telhaW, telhaYbase);
+    ctx.closePath(); ctx.clip();
+    const nFileiras = 10;
+    const filH = (telhaYbase - telhaApice) / nFileiras;
+    for (let r = 0; r < nFileiras; r++) {
+      const ty  = telhaYbase - r * filH;
+      const t   = r / nFileiras;
+      const rw  = telhaW * (1 - t) + 4;
+      const rx  = telhaX + telhaW / 2 - rw / 2;
+      /* Convexidade: destaque no topo de cada fileira */
+      const hGrd = ctx.createLinearGradient(0, ty - filH, 0, ty);
+      hGrd.addColorStop(0,    'rgba(255,255,255,0.18)');
+      hGrd.addColorStop(0.35, 'rgba(255,255,255,0.06)');
+      hGrd.addColorStop(1,    'rgba(0,0,0,0.04)');
+      ctx.fillStyle = hGrd; ctx.fillRect(rx, ty - filH, rw, filH);
+      /* Separador horizontal */
+      ctx.strokeStyle = 'rgba(0,0,0,0.24)'; ctx.lineWidth = 0.9;
+      ctx.beginPath(); ctx.moveTo(rx, ty); ctx.lineTo(rx + rw, ty); ctx.stroke();
+      /* Separadores verticais (telhas individuais ~14px) */
+      const tileW  = Math.max(8, rw / Math.round(Math.max(1, rw / 14)));
+      const nTiles = Math.round(Math.max(1, rw / tileW));
+      const off    = (r % 2) * (tileW * 0.5);
+      ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 0.7;
+      for (let i = 1; i <= nTiles; i++) {
+        const tx2 = rx + i * tileW - off;
+        if (tx2 > rx + 1 && tx2 < rx + rw - 1) {
+          ctx.beginPath(); ctx.moveTo(tx2, ty - filH); ctx.lineTo(tx2, ty); ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
+
+    /* Contorno do telhado */
+    ctx.strokeStyle = '#4a3508'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(telhaX, telhaYbase);
+    ctx.lineTo(telhaX + telhaW / 2, telhaApice);
+    ctx.lineTo(telhaX + telhaW, telhaYbase);
+    ctx.closePath(); ctx.stroke();
+
+    /* ===== BEIRAL ===== */
+    ctx.fillStyle = '#4a3508';
+    ctx.fillRect(telhaX - 2, telhaYbase - 3, telhaW + 4, 5);
+    const eaveShadow = ctx.createLinearGradient(0, telhaYbase + 2, 0, telhaYbase + 14);
+    eaveShadow.addColorStop(0, 'rgba(0,0,0,0.25)');
+    eaveShadow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = eaveShadow;
+    ctx.fillRect(telhaX - 2, telhaYbase + 2, telhaW + 4, 12);
+
+    /* ===== CALHA ===== */
+    ctx.fillStyle = '#80888e';
+    ctx.beginPath();
+    ctx.ellipse(telhaX + telhaW / 2, telhaYbase + 4,
+                telhaW / 2 + 4, 4, 0, 0, Math.PI);
+    ctx.fill();
+    ctx.strokeStyle = '#60686e'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(telhaX + telhaW / 2, telhaYbase + 4,
+                telhaW / 2 + 4, 4, 0, 0, Math.PI);
     ctx.stroke();
 
-    /* TELHADO */
-    const telGrad = ctx.createLinearGradient(g.telhaX, g.telhaApice, g.telhaX + g.telhaW, g.telhaYbase);
-    telGrad.addColorStop(0, '#6b4f12'); telGrad.addColorStop(0.5, '#8B6914'); telGrad.addColorStop(1, '#5a4010');
-    ctx.fillStyle = telGrad;
+    /* ===== CUMEEIRA ===== */
+    const ridgeGrd = ctx.createLinearGradient(
+      telhaX + telhaW / 2 - 9, telhaApice,
+      telhaX + telhaW / 2 + 9, telhaApice);
+    ridgeGrd.addColorStop(0,   '#a87010');
+    ridgeGrd.addColorStop(0.5, '#FFD040');
+    ridgeGrd.addColorStop(1,   '#a87010');
+    ctx.fillStyle = ridgeGrd;
     ctx.beginPath();
-    ctx.moveTo(g.telhaX, g.telhaYbase);
-    ctx.lineTo(g.telhaX + g.telhaW / 2, g.telhaApice);
-    ctx.lineTo(g.telhaX + g.telhaW, g.telhaYbase);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#4a3508'; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 0.8;
-    for (let i = 1; i < 5; i++) {
-      const fy = g.telhaYbase - (g.telhaYbase - g.telhaApice) * (i / 5);
-      const fw = g.telhaW * (1 - i / 5);
-      const fx = g.telhaX + g.telhaW / 2 - fw / 2;
-      ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx + fw, fy); ctx.stroke();
-    }
+    ctx.roundRect(telhaX + telhaW / 2 - 9, telhaApice - 5, 18, 10, 5);
+    ctx.fill();
+    ctx.strokeStyle = '#7a5010'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(telhaX + telhaW / 2 - 9, telhaApice - 5, 18, 10, 5);
+    ctx.stroke();
   }
 
   /* ================================================================
@@ -727,6 +920,13 @@ class AnimacaoMontagem {
       cabos,
       solX: W * 0.82, solY: H * 0.14, solR: Math.min(W, H) * 0.07,
       estrelas,
+      /* perspectiva 3D */
+      profX: W * 0.028, profY: W * 0.016,
+      /* porta */
+      doorW: casaW * 0.17,
+      doorH: casaH * 0.52,
+      doorX: casaX + casaW * 0.18,
+      doorY: casaYtopo + casaH - casaH * 0.52,
     };
 
     if (this.#etapa >= 6) this.#camYAlvo = -panDelta;
