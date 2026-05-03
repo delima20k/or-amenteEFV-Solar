@@ -855,7 +855,6 @@ class EfvSolarApp {
   #calculadoraCtrl     = null;
   #shareCtrl           = null;
   #pwaCtrl             = null;
-  #animacao            = null;
   #sheetAberto         = false;
 
   constructor() {
@@ -872,8 +871,6 @@ class EfvSolarApp {
     this.#shareCtrl       = new ShareController();
     this.#router          = new Router(tela => this.#aoNavegar(tela));
     this.#pwaCtrl         = new PwaInstallController();
-    const canvasSolar = document.getElementById('solar-canvas');
-    if (canvasSolar) this.#animacao = new AnimacaoMontagem(canvasSolar);
     this.#vincularEventos();
     EfvSolarApp.#registrarServiceWorker();
   }
@@ -910,10 +907,6 @@ class EfvSolarApp {
     /* Sheet: fechar ao clicar no backdrop */
     document.getElementById('sheet-backdrop')
       ?.addEventListener('click', () => this.#fecharSheet());
-
-    /* Home: replay da animação */
-    document.getElementById('btn-ver-animacao')
-      ?.addEventListener('click', () => this.#animacao?.reiniciar());
   }
 
   /* Abre a sheet: canvas dimma, formulário sobe como bottom sheet */
