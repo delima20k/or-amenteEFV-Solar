@@ -313,11 +313,68 @@ class FinancasController {
 }
 
 /* ===================================================
+   TARIFA SERVICE — busca tarifa Enel SP com cache
+   =================================================== */
+class TarifaService {
+  /* URL CORS proxy para a API ANEEL/ANNEL Open Data.
+     Como o app roda em file://, usamos um proxy CORS público.
+     Fallback hardcoded = tarifa mai/2026 Enel SP TUSD+TE. */
+  static #FALLBACK     = 0.982;
+  static #CACHE_KEY    = 'efv_tarifa_cache';
+  static #CACHE_TTL_MS = 24 * 60 * 60 * 1000; /* 24 h */
+
+  static async obter() {
+    /* 1. cache local ainda válido? */
+    try {
+      const raw = localStorage.getItem(TarifaService.#CACHE_KEY);
+      if (raw) {
+        const { valor, ts } = JSON.parse(raw);
+        if (Date.now() - ts < TarifaService.#CACHE_TTL_MS) {
+          return { valor, fonte: 'cache' };
+        }
+      }
+    } catch { /* ignore */ }
+
+    /* 2. tenta buscar via CORS proxy */
+    try {
+      /* API pública ANEEL — tabela de tarifas distribuidoras
+         Filtra por distribuidora Enel SP (SigAgente=EDP SP) subgrupo B1 */
+      const url = 'https://corsproxy.io/?' +
+        encodeURIComponent(
+          'https://dadosabertos.aneel.gov.br/api/3/action/datastore_search?' +
+          'resource_id=b1bd71e7-d0ad-4214-9053-cbd58e9564a7&limit=5&' +
+          'filters={"SigAgente":"EDP SP","DscSubGrupo":"B1","DscModalidadeTarifaria":"Convencional"}&' +
+          'sort=DatInicioVigencia+desc'
+        );
+      const res  = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      const json = await res.json();
+      const rec  = json?.result?.records?.[0];
+      /* VlrTE + VlrTUSD = tarifa total kWh */
+      const te   = parseFloat(rec?.VlrTE   ?? 0);
+      const tusd = parseFloat(rec?.VlrTUSD ?? 0);
+      if (te > 0 && tusd > 0) {
+        const valor = +(te + tusd).toFixed(4);
+        localStorage.setItem(TarifaService.#CACHE_KEY,
+          JSON.stringify({ valor, ts: Date.now() }));
+        return { valor, fonte: 'api' };
+      }
+    } catch { /* rede indisponível ou proxy falhou */ }
+
+    /* 3. fallback hardcoded */
+    return { valor: TarifaService.#FALLBACK, fonte: 'fallback' };
+  }
+
+  static formatar(v) {
+    return 'R$ ' + v.toFixed(3).replace('.', ',');
+  }
+}
+
+/* ===================================================
    TELA CALCULADORA SOLAR
    =================================================== */
 class CalculadoraController {
-  static #TARIFA_KWH  = 0.982;
   static #CRESCIMENTO = 0.06;
+  static #TARIFA_KWH  = 0.982; /* atualizado assincronamente */
 
   #slider;
   #sliderAnos;
@@ -330,77 +387,156 @@ class CalculadoraController {
   #btnAnosMais;
   #btnCalc;
   #resultado;
-  #ultimoCalc = null; /* guarda dados do último cálculo para ações pós-resultado */
+  #fillConsumo;
+  #fillAnos;
+  #thumbConsumoWrap;
+  #thumbAnosWrap;
+  #lightningConsumo;
+  #lightningAnos;
+  #faturaPrev;
+  #tarifaDisplay;
+  #tarifaStatus;
+  #ultimoCalc = null;
+  #lightningTimer = null;
 
   constructor() {
-    this.#slider        = document.getElementById('slider-consumo');
-    this.#sliderAnos    = document.getElementById('slider-anos');
-    this.#displayConsumo= document.getElementById('valor-consumo');
-    this.#displayAnos   = document.getElementById('valor-anos');
-    this.#inputConta    = document.getElementById('input-conta');
-    this.#btnMenos      = document.getElementById('btn-menos');
-    this.#btnMais       = document.getElementById('btn-mais');
-    this.#btnAnosMenos  = document.getElementById('btn-anos-menos');
-    this.#btnAnosMais   = document.getElementById('btn-anos-mais');
-    this.#btnCalc       = document.getElementById('btn-calcular');
-    this.#resultado     = document.getElementById('calc-resultado');
+    this.#slider          = document.getElementById('slider-consumo');
+    this.#sliderAnos      = document.getElementById('slider-anos');
+    this.#displayConsumo  = document.getElementById('valor-consumo');
+    this.#displayAnos     = document.getElementById('valor-anos');
+    this.#inputConta      = document.getElementById('input-conta');
+    this.#btnMenos        = document.getElementById('btn-menos');
+    this.#btnMais         = document.getElementById('btn-mais');
+    this.#btnAnosMenos    = document.getElementById('btn-anos-menos');
+    this.#btnAnosMais     = document.getElementById('btn-anos-mais');
+    this.#btnCalc         = document.getElementById('btn-calcular');
+    this.#resultado       = document.getElementById('calc-resultado');
+    this.#fillConsumo     = document.getElementById('fill-consumo');
+    this.#fillAnos        = document.getElementById('fill-anos');
+    this.#thumbConsumoWrap= document.getElementById('thumb-consumo-wrap');
+    this.#thumbAnosWrap   = document.getElementById('thumb-anos-wrap');
+    this.#lightningConsumo= document.getElementById('lightning-consumo');
+    this.#lightningAnos   = document.getElementById('lightning-anos');
+    this.#faturaPrev      = document.getElementById('fatura-preview');
+    this.#tarifaDisplay   = document.getElementById('tarifa-display');
+    this.#tarifaStatus    = document.getElementById('tarifa-status');
+
     this.#bind();
-    this.#atualizarSlider(this.#slider, this.#displayConsumo, 50, 2000);
-    this.#atualizarSliderAnos();
+    this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
+    this.#syncSliderAnos();
+    this.#atualizarPreviewFatura();
+    this.#carregarTarifa();
+  }
+
+  async #carregarTarifa() {
+    const { valor, fonte } = await TarifaService.obter();
+    CalculadoraController.#TARIFA_KWH = valor;
+    if (this.#tarifaDisplay) {
+      this.#tarifaDisplay.innerHTML =
+        TarifaService.formatar(valor).replace('R$ ', 'R$ ') +
+        '<span class="calc-tarifa-unit">/kWh</span>';
+    }
+    if (this.#tarifaStatus) {
+      this.#tarifaStatus.textContent = fonte === 'api' ? '✓ ao vivo' : fonte === 'cache' ? '⏱ cache' : '● fallback';
+      this.#tarifaStatus.className   = 'calc-tarifa-status calc-tarifa-status--' + fonte;
+    }
+    this.#atualizarPreviewFatura();
   }
 
   #bind() {
     this.#slider.addEventListener('input', () => {
       this.#inputConta.value = '';
-      this.#atualizarSlider(this.#slider, this.#displayConsumo, 50, 2000);
+      this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
+      this.#atualizarPreviewFatura();
+      this.#dispararRaios(this.#lightningConsumo);
     });
-    this.#sliderAnos.addEventListener('input', () => this.#atualizarSliderAnos());
+    this.#sliderAnos.addEventListener('input', () => {
+      this.#syncSliderAnos();
+      this.#dispararRaios(this.#lightningAnos);
+    });
 
     this.#btnMenos.addEventListener('click', () => {
       this.#slider.value = Math.max(50, +this.#slider.value - 10);
       this.#inputConta.value = '';
-      this.#atualizarSlider(this.#slider, this.#displayConsumo, 50, 2000);
+      this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
+      this.#atualizarPreviewFatura();
+      this.#dispararRaios(this.#lightningConsumo);
     });
     this.#btnMais.addEventListener('click', () => {
       this.#slider.value = Math.min(2000, +this.#slider.value + 10);
       this.#inputConta.value = '';
-      this.#atualizarSlider(this.#slider, this.#displayConsumo, 50, 2000);
+      this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
+      this.#atualizarPreviewFatura();
+      this.#dispararRaios(this.#lightningConsumo);
     });
     this.#btnAnosMenos.addEventListener('click', () => {
       this.#sliderAnos.value = Math.max(1, +this.#sliderAnos.value - 1);
-      this.#atualizarSliderAnos();
+      this.#syncSliderAnos();
+      this.#dispararRaios(this.#lightningAnos);
     });
     this.#btnAnosMais.addEventListener('click', () => {
       this.#sliderAnos.value = Math.min(40, +this.#sliderAnos.value + 1);
-      this.#atualizarSliderAnos();
+      this.#syncSliderAnos();
+      this.#dispararRaios(this.#lightningAnos);
     });
 
-    /* Quando usuário informa valor da conta → converte para consumo */
     this.#inputConta.addEventListener('input', () => {
-      const valor = parseFloat(this.#inputConta.value);
-      if (!isNaN(valor) && valor > 0) {
-        const consumoCalculado = Math.round(valor / CalculadoraController.#TARIFA_KWH / 10) * 10;
-        const consumoClamp     = Math.min(2000, Math.max(50, consumoCalculado));
-        this.#slider.value = consumoClamp;
-        this.#atualizarSlider(this.#slider, this.#displayConsumo, 50, 2000);
+      const val = parseFloat(this.#inputConta.value);
+      if (!isNaN(val) && val > 0) {
+        const c = Math.round(val / CalculadoraController.#TARIFA_KWH / 10) * 10;
+        this.#slider.value = Math.min(2000, Math.max(50, c));
+        this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
+        this.#atualizarPreviewFatura();
       }
     });
 
     this.#btnCalc.addEventListener('click', () => this.#calcular());
   }
 
-  #atualizarSlider(slider, display, min, max) {
+  #syncSlider(slider, fill, thumbWrap, min, max) {
     const v   = +slider.value;
-    display.textContent = v;
-    const pct = ((v - min) / (max - min) * 100).toFixed(1);
-    slider.style.setProperty('--slider-pct', `${pct}%`);
+    const pct = ((v - min) / (max - min) * 100);
+    if (fill)      fill.style.width      = pct + '%';
+    if (thumbWrap) thumbWrap.style.left  = pct + '%';
+    slider.style.setProperty('--slider-pct', pct.toFixed(1) + '%');
+    if (slider === this.#slider && this.#displayConsumo) {
+      this.#displayConsumo.textContent = v;
+    }
   }
 
-  #atualizarSliderAnos() {
+  #syncSliderAnos() {
     const v   = +this.#sliderAnos.value;
-    this.#displayAnos.textContent = v;
-    const pct = ((v - 1) / (40 - 1) * 100).toFixed(1);
-    this.#sliderAnos.style.setProperty('--slider-pct', `${pct}%`);
+    const pct = ((v - 1) / (40 - 1) * 100);
+    if (this.#fillAnos)       this.#fillAnos.style.width      = pct + '%';
+    if (this.#thumbAnosWrap)  this.#thumbAnosWrap.style.left  = pct + '%';
+    this.#sliderAnos.style.setProperty('--slider-pct', pct.toFixed(1) + '%');
+    if (this.#displayAnos) this.#displayAnos.textContent = v;
+  }
+
+  #atualizarPreviewFatura() {
+    if (!this.#faturaPrev) return;
+    const consumo = +this.#slider.value;
+    const fatura  = consumo * CalculadoraController.#TARIFA_KWH;
+    this.#faturaPrev.textContent = '≈ ' + CalculadoraController.#fmt(fatura) + ' / mês';
+  }
+
+  #dispararRaios(container) {
+    if (!container) return;
+    clearTimeout(this.#lightningTimer);
+    container.innerHTML = '';
+    const n = Math.floor(Math.random() * 3) + 2;
+    for (let i = 0; i < n; i++) {
+      const bolt = document.createElement('span');
+      bolt.className   = 'lightning-bolt';
+      bolt.textContent = '⚡';
+      bolt.style.cssText = `left:${10 + Math.random() * 80}%;animation-delay:${(Math.random() * 0.3).toFixed(2)}s`;
+      container.appendChild(bolt);
+    }
+    container.classList.add('active');
+    this.#lightningTimer = setTimeout(() => {
+      container.classList.remove('active');
+      container.innerHTML = '';
+    }, 700);
   }
 
   #calcular() {
@@ -421,26 +557,28 @@ class CalculadoraController {
       linhasAnos.push({ ano: a, ano_cal: anoAtual + a - 1, valor: valorAno, acumulado });
     }
 
-    /* pontos-chave para exibir na tabela */
     const pontos = linhasAnos.filter(l =>
       l.ano <= 5 || l.ano === 10 || l.ano === 15 || l.ano === 20 ||
       l.ano === 25 || l.ano === 30 || l.ano === anos
     );
-    const deduplicados = [...new Map(pontos.map(l => [l.ano, l])).values()];
-
-    const retornoMeses = faturaMensal > 0 ? (25000 / faturaMensal).toFixed(1) : '—';
+    const dedup = [...new Map(pontos.map(l => [l.ano, l])).values()];
+    const retorno = faturaMensal > 0 ? (25000 / faturaMensal).toFixed(1) : '—';
 
     this.#ultimoCalc = {
       consumo, anos, tarifa, taxa,
-      faturaMensal, faturaAnual, acumulado,
-      retornoMeses,
+      faturaMensal, faturaAnual, acumulado, retornoMeses: retorno,
       economia_mensal:  CalculadoraController.#fmt(faturaMensal),
       economia_anual:   CalculadoraController.#fmt(faturaAnual),
       economia_periodo: CalculadoraController.#fmt(acumulado),
       investimento:     'R$ 25.000,00',
+      linhas: dedup.map(l => ({
+        ano: l.ano, ano_cal: l.ano_cal,
+        valorFmt: CalculadoraController.#fmt(l.valor),
+        acumuladoFmt: CalculadoraController.#fmt(l.acumulado),
+      })),
     };
 
-    const tabelaLinhas = deduplicados.map(l => `
+    const tabelaLinhas = dedup.map(l => `
       <tr>
         <td>Ano ${l.ano} (${l.ano_cal})</td>
         <td>${CalculadoraController.#fmt(l.valor)}</td>
@@ -463,43 +601,35 @@ class CalculadoraController {
         </div>
         <div class="calc-kpi calc-kpi--retorno">
           <div class="calc-kpi-label">Retorno do Invest.</div>
-          <div class="calc-kpi-valor">${retornoMeses} meses</div>
+          <div class="calc-kpi-valor">${retorno} meses</div>
         </div>
       </div>
-
       <div class="calc-tabela-wrap">
         <table class="calc-tabela">
-          <thead>
-            <tr><th>Período</th><th>Economia/Ano</th><th>Acumulado</th></tr>
-          </thead>
+          <thead><tr><th>Período</th><th>Economia/Ano</th><th>Acumulado</th></tr></thead>
           <tbody>${tabelaLinhas}</tbody>
         </table>
       </div>
-
       <div class="calc-result-actions">
         <button id="btn-usar-orcamento" class="btn-usar-orcamento">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           Usar no Orçamento
         </button>
       </div>
-
       <div class="calc-explicacao">
         <strong>Metodologia:</strong> Tarifa Enel SP R$${tarifa.toFixed(3)}/kWh com crescimento tarifário de
         ${(taxa*100).toFixed(0)}% a.a. Consumo de ${consumo} kWh/mês gera fatura de
         ${CalculadoraController.#fmt(faturaMensal)}/mês. Retorno estimado com sistema de
-        ~R$25.000: <strong>${retornoMeses} meses</strong>. Cálculo conforme resolução ANEEL vigente.
+        ~R$25.000: <strong>${retorno} meses</strong>. Cálculo conforme resolução ANEEL vigente.
       </div>`;
 
     this.#resultado.classList.add('is-visible');
-
-    document.getElementById('btn-usar-orcamento').addEventListener('click', () => {
-      this.#preencherFormulario();
-    });
+    document.getElementById('btn-usar-orcamento').addEventListener('click', () => this.#preencherFormulario());
   }
 
   #preencherFormulario() {
     if (!this.#ultimoCalc) return;
-    const c = this.#ultimoCalc;
+    const c   = this.#ultimoCalc;
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
     set('economia_mensal', c.economia_mensal);
     set('economia_anual',  c.economia_anual);
@@ -507,8 +637,6 @@ class CalculadoraController {
     set('investimento',    c.investimento);
     set('inflacao',        (CalculadoraController.#CRESCIMENTO * 100).toFixed(0) + '%');
     set('economia',        `${c.consumo} kWh/mês — Retorno em ${c.retornoMeses} meses`);
-
-    /* Navegar para a tela de formulário via evento */
     document.querySelectorAll('[data-tela="form"]')[0]?.click();
   }
 
@@ -518,7 +646,6 @@ class CalculadoraController {
     return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
 }
-
 /* ===================================================
    COMPARTILHAMENTO (WhatsApp / E-mail / Telegram / Print)
    =================================================== */
@@ -529,6 +656,7 @@ class ShareController {
   #btnEmail;
   #btnTelegram;
   #btnPrint;
+  #btnDownload;
   #htmlAtual = null;
   #nomeAtual = '';
 
@@ -538,7 +666,8 @@ class ShareController {
     this.#btnWhatsApp= document.getElementById('share-whatsapp');
     this.#btnEmail   = document.getElementById('share-email');
     this.#btnTelegram= document.getElementById('share-telegram');
-    this.#btnPrint   = document.getElementById('share-print');
+    this.#btnPrint    = document.getElementById('share-print');
+    this.#btnDownload = document.getElementById('share-download');
     this.#bind();
   }
 
@@ -551,6 +680,7 @@ class ShareController {
     this.#btnEmail.addEventListener('click',    () => this.#compartilharEmail());
     this.#btnTelegram.addEventListener('click', () => this.#compartilharTelegram());
     this.#btnPrint.addEventListener('click',    () => this.#imprimir());
+    this.#btnDownload?.addEventListener('click', () => this.#baixarPDF());
   }
 
   abrir(htmlPDF, nome) {
@@ -593,6 +723,18 @@ class ShareController {
     win.document.write(this.#htmlAtual);
     win.document.close();
     win.addEventListener('load', () => setTimeout(() => win.print(), 400));
+  }
+
+  #baixarPDF() {
+    if (!this.#htmlAtual) return;
+    const blob = new Blob([this.#htmlAtual], { type: 'text/html;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'orcamento-efv-solar.html';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
   }
 }
 
