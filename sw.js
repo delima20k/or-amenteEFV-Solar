@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'efv-solar-v2';
+const CACHE_NAME = 'efv-solar-v3';
 
 const ASSETS_PARA_CACHE = [
   './',
@@ -11,6 +11,7 @@ const ASSETS_PARA_CACHE = [
   './manifest.json',
   './assets/efv_solar.png',
   './assets/icon.svg',
+  './assets/three.min.js',
 ];
 
 /* Instala o SW e pré-armazena os assets */
