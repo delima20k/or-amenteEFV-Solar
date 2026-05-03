@@ -855,6 +855,7 @@ class EfvSolarApp {
   #calculadoraCtrl     = null;
   #shareCtrl           = null;
   #pwaCtrl             = null;
+  #animacao            = null;
   #sheetAberto         = false;
 
   constructor() {
@@ -871,6 +872,8 @@ class EfvSolarApp {
     this.#shareCtrl       = new ShareController();
     this.#router          = new Router(tela => this.#aoNavegar(tela));
     this.#pwaCtrl         = new PwaInstallController();
+    const canvas = document.getElementById('solar-canvas');
+    if (canvas) this.#animacao = new AnimationController(canvas);
     this.#vincularEventos();
     EfvSolarApp.#registrarServiceWorker();
   }
