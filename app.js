@@ -820,6 +820,7 @@ class EfvSolarApp {
   #shareCtrl           = null;
   #pwaCtrl             = null;
   #animacao            = null;
+  #sheetAberto         = false;
 
   constructor() {
     this.#btnGerar = document.getElementById('btn-gerar-pdf');
@@ -843,6 +844,11 @@ class EfvSolarApp {
 
   #aoNavegar(tela) {
     this.#menuController.fechar();
+    /* Se navegou para fora do formulário enquanto a sheet estava aberta: fecha silenciosamente */
+    if (this.#sheetAberto && tela !== 'formulario') {
+      document.body.classList.remove('sheet-open', 'sheet-closing');
+      this.#sheetAberto = false;
+    }
     if (tela === 'orcamentos') this.#orcamentosCtrl.render();
     if (tela === 'financas')   this.#financasCtrl.render();
   }
@@ -856,8 +862,41 @@ class EfvSolarApp {
 
   #vincularEventos() {
     this.#btnGerar.addEventListener('click', () => this.#salvarEGerarPDF());
+
+    /* Home: abrir sheet ao clicar em Novo Orçamento */
     document.getElementById('btn-novo-orcamento')
-      ?.addEventListener('click', () => this.#router.navegar('formulario'));
+      ?.addEventListener('click', () => this.#abrirSheet());
+
+    /* Sheet: fechar ao clicar no X */
+    document.getElementById('btn-fechar-sheet')
+      ?.addEventListener('click', () => this.#fecharSheet());
+
+    /* Sheet: fechar ao clicar no backdrop */
+    document.getElementById('sheet-backdrop')
+      ?.addEventListener('click', () => this.#fecharSheet());
+
+    /* Home: replay da animação */
+    document.getElementById('btn-ver-animacao')
+      ?.addEventListener('click', () => this.#animacao?.reiniciar());
+  }
+
+  /* Abre a sheet: canvas dimma, formulário sobe como bottom sheet */
+  #abrirSheet() {
+    if (this.#sheetAberto) return;
+    this.#sheetAberto = true;
+    document.body.classList.add('sheet-open');
+    this.#router.navegar('formulario');
+  }
+
+  /* Fecha a sheet com animação de slide-down */
+  #fecharSheet() {
+    if (!this.#sheetAberto) return;
+    document.body.classList.add('sheet-closing');
+    setTimeout(() => {
+      document.body.classList.remove('sheet-open', 'sheet-closing');
+      this.#sheetAberto = false;
+      this.#router.navegar('home');
+    }, 270);
   }
 
   #coletarDados() {
@@ -897,6 +936,8 @@ class EfvSolarApp {
 
       const htmlPDF = PrintBuilder.build(dados, this.#logoBase64);
       document.getElementById('orcamento-form').reset();
+      /* Se o formulário estava aberto como sheet: fecha antes de abrir o modal de compartilhamento */
+      this.#fecharSheet();
       this.#shareCtrl.abrir(htmlPDF, nome);
     } finally {
       this.#setCarregando(false);

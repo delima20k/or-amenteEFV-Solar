@@ -1628,6 +1628,7 @@ body {
   height: 100%;
   display: block;
   pointer-events: none;
+  transition: filter 0.5s ease, opacity 0.5s ease;
 }
 
 /* Textos e botão ficam sobre o canvas */
@@ -1680,4 +1681,135 @@ body {
   transform: scale(1.04);
 }
 .home-btn-orcamento:active { transform: scale(.97); }
+
+/* === BOTÃO REPLAY — Ver animacao novamente === */
+.btn-replay {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.38);
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 0.4px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s;
+}
+.btn-replay:hover {
+  color: rgba(255,255,255,0.75);
+  background: rgba(255,255,255,0.07);
+}
+.btn-replay svg { flex-shrink: 0; }
+
+/* ================================================================
+   BOTTOM SHEET — formulário sobre o canvas
+================================================================ */
+
+/* Backdrop escuro atrás da sheet */
+#sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  background: rgba(0,0,0,0.65);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+  backdrop-filter: blur(0px);
+  -webkit-backdrop-filter: blur(0px);
+}
+body.sheet-open #sheet-backdrop {
+  opacity: 1;
+  pointer-events: auto;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+/* Canvas fica desfocado quando a sheet abre */
+body.sheet-open .home-canvas {
+  filter: blur(5px);
+  opacity: 0.35;
+}
+
+/* Home permanece visível atrás da sheet */
+body.sheet-open #tela-home {
+  display: block !important;
+  animation: none !important;
+}
+
+/* tela-formulario vira bottom sheet */
+body.sheet-open #tela-formulario {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  max-height: 88dvh;
+  overflow-y: auto;
+  border-radius: 20px 20px 0 0;
+  background: var(--white);
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.4);
+  animation: sheet-slide-up 0.38s cubic-bezier(0.32,0.72,0,1) both;
+}
+
+/* Animacao de fechamento */
+body.sheet-closing #tela-formulario {
+  animation: sheet-slide-down 0.28s cubic-bezier(0.4,0,1,1) forwards;
+}
+
+@keyframes sheet-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes sheet-slide-down {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
+}
+
+/* Handle bar da sheet */
+.sheet-handle-wrap {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px 4px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--white);
+  border-radius: 20px 20px 0 0;
+}
+body.sheet-open .sheet-handle-wrap {
+  display: flex;
+}
+.sheet-handle-bar {
+  width: 40px;
+  height: 4px;
+  background: rgba(0,0,0,0.15);
+  border-radius: 2px;
+}
+
+/* Botão X de fechar */
+.sheet-close-btn {
+  position: absolute;
+  right: 14px;
+  top: 8px;
+  background: rgba(0,0,0,0.06);
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--dark);
+  transition: background 0.2s, transform 0.15s;
+}
+.sheet-close-btn:hover  { background: rgba(0,0,0,0.12); }
+.sheet-close-btn:active { transform: scale(0.9); }
 
