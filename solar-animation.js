@@ -8,18 +8,39 @@
 
 /* ─────────────────────────────────────────────────────────────────────
    CONSTANTES GLOBAIS DA CENA
+   Todos os valores em metros. Origin (0,0,0) = centro da fundação.
+   Eixo Y: vertical (para cima)
+   Eixo Z: profundidade da casa (front = -Z, back = +Z)
+   Eixo X: largura
    ───────────────────────────────────────────────────────────────────── */
 const CASA = Object.freeze({
-  W:  7,     // largura (X)
-  D:  10,    // profundidade (Z)
-  H:  3.8,   // altura das paredes
-  RA: 2.2,   // altura do telhado (ridge)
-  FH: 0.5,   // fundação
-  EV: 0.45,  // beiral
+  W:  7,      // largura (X)
+  D:  10,     // profundidade (Z)
+  H:  3.8,    // altura das paredes
+  RA: 2.2,    // altura adicional do telhado (ridge acima do topo das paredes)
+  FH: 0.5,    // altura da fundação
+  EV: 0.5,    // projeção do beiral
+  WT: 0.25,   // espessura das paredes
 });
 
 /* ─────────────────────────────────────────────────────────────────────
-   MaterialLibrary — texturas PBR procedurais (Canvas 2D)
+   Helpers globais
+   ───────────────────────────────────────────────────────────────────── */
+function v3(x, y, z) { return new THREE.Vector3(x, y, z); }
+function clamp01(t)  { return Math.max(0, Math.min(1, t)); }
+
+function easeOutBack(t) {
+  if (t <= 0) return 0; if (t >= 1) return 1;
+  const c1 = 1.70158, c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
+function easeInOut(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   MaterialLibrary — texturas PBR procedurais via Canvas 2D
    ───────────────────────────────────────────────────────────────────── */
 class MaterialLibrary {
   static #cache = new Map();
@@ -37,142 +58,112 @@ class MaterialLibrary {
 
   static telha() {
     const tex = MaterialLibrary.#tex('telha', 512, 256, (ctx, w, h) => {
-      ctx.fillStyle = '#7a2e1a';
+      ctx.fillStyle = '#8b3520';
       ctx.fillRect(0, 0, w, h);
-      const cols = 6, rows = 8;
+      const cols = 7, rows = 10;
       const tW = w / cols, tH = h / rows;
       for (let r = 0; r < rows; r++) {
         const off = (r % 2) * (tW * 0.5);
         for (let c = 0; c < cols + 1; c++) {
           const x = c * tW - off, y = r * tH;
-          const hue = 10 + (Math.sin(r * 7 + c * 13) * 5);
-          const lit = 28 + (Math.sin(r * 3 + c * 11) * 6);
+          const hue = 12 + Math.sin(r * 7 + c * 13) * 4;
+          const lit = 30 + Math.sin(r * 3 + c * 11) * 7;
           const g = ctx.createLinearGradient(x, y, x, y + tH);
-          g.addColorStop(0,    `hsl(${hue},65%,${lit + 12}%)`);
-          g.addColorStop(0.45, `hsl(${hue},60%,${lit}%)`);
-          g.addColorStop(1,    `hsl(${hue},55%,${lit - 8}%)`);
+          g.addColorStop(0,   `hsl(${hue},62%,${lit + 10}%)`);
+          g.addColorStop(0.5, `hsl(${hue},58%,${lit}%)`);
+          g.addColorStop(1,   `hsl(${hue},52%,${lit - 9}%)`);
           ctx.fillStyle = g;
           ctx.beginPath();
-          ctx.ellipse(x + tW * 0.5, y + tH * 0.62, tW * 0.46, tH * 0.54, 0, 0, Math.PI * 2);
+          ctx.ellipse(x + tW * 0.5, y + tH * 0.6, tW * 0.44, tH * 0.52, 0, 0, Math.PI * 2);
           ctx.fill();
-          ctx.strokeStyle = 'rgba(0,0,0,0.22)';
-          ctx.lineWidth = 1.2;
-          ctx.stroke();
+          ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 1; ctx.stroke();
         }
       }
     });
-    tex.repeat.set(6, 4);
-    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.82, metalness: 0.04 });
+    tex.repeat.set(5, 4);
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.84, metalness: 0.04, side: THREE.FrontSide });
   }
 
   static reboco() {
     const tex = MaterialLibrary.#tex('reboco', 512, 512, (ctx, w, h) => {
-      ctx.fillStyle = '#e8e0d2';
-      ctx.fillRect(0, 0, w, h);
-      for (let i = 0; i < 4000; i++) {
-        const x = Math.random() * w, y = Math.random() * h;
-        const r = Math.random() * 2.5;
-        const v = Math.random() * 20 - 10;
-        ctx.fillStyle = `rgba(${140 + v | 0},${130 + v | 0},${115 + v | 0},0.18)`;
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
+      ctx.fillStyle = '#ede5d4'; ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 5000; i++) {
+        const x = Math.random() * w, y = Math.random() * h, r = Math.random() * 2;
+        const v = (Math.random() - 0.5) * 22;
+        ctx.fillStyle = `rgba(${145 + v | 0},${135 + v | 0},${118 + v | 0},0.16)`;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
       }
     });
     tex.repeat.set(3, 3);
-    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92, metalness: 0.0 });
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide });
   }
 
   static painel() {
     const tex = MaterialLibrary.#tex('painel', 512, 320, (ctx, w, h) => {
       const bg = ctx.createLinearGradient(0, 0, w, h);
-      bg.addColorStop(0, '#0a1628');
-      bg.addColorStop(1, '#0d1f3c');
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, w, h);
-      const cols = 8, rows = 5;
-      const cW = (w - 20) / cols, cH = (h - 20) / rows;
+      bg.addColorStop(0, '#0a1628'); bg.addColorStop(1, '#0d1f3c');
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+      const cols = 8, rows = 5, cW = (w - 20) / cols, cH = (h - 20) / rows;
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const x = 10 + c * cW, y = 10 + r * cH;
-          const cellBg = ctx.createLinearGradient(x, y, x + cW, y + cH);
-          cellBg.addColorStop(0, '#0f2248');
-          cellBg.addColorStop(1, '#0a1830');
-          ctx.fillStyle = cellBg;
-          ctx.fillRect(x + 1.5, y + 1.5, cW - 3, cH - 3);
-          const shine = ctx.createLinearGradient(x, y, x + cW * 0.6, y + cH * 0.6);
-          shine.addColorStop(0, 'rgba(100,200,255,0.10)');
-          shine.addColorStop(1, 'rgba(0,0,0,0)');
-          ctx.fillStyle = shine;
-          ctx.fillRect(x + 1.5, y + 1.5, cW - 3, cH - 3);
+          const cb = ctx.createLinearGradient(x, y, x + cW, y + cH);
+          cb.addColorStop(0, '#0f2248'); cb.addColorStop(1, '#0a1830');
+          ctx.fillStyle = cb; ctx.fillRect(x + 1.5, y + 1.5, cW - 3, cH - 3);
+          const sh = ctx.createLinearGradient(x, y, x + cW * 0.6, y + cH * 0.6);
+          sh.addColorStop(0, 'rgba(100,200,255,0.10)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = sh; ctx.fillRect(x + 1.5, y + 1.5, cW - 3, cH - 3);
         }
       }
-      ctx.strokeStyle = '#8899aa';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(3, 3, w - 6, h - 6);
+      ctx.strokeStyle = '#8899aa'; ctx.lineWidth = 4; ctx.strokeRect(3, 3, w - 6, h - 6);
     });
-    return new THREE.MeshStandardMaterial({
-      map: tex, roughness: 0.25, metalness: 0.65, color: 0x182844,
-    });
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.25, metalness: 0.65, color: 0x182844 });
   }
 
   static painelEmissivo() {
     const m = MaterialLibrary.painel();
-    m.emissive = new THREE.Color(0x1a3a88);
-    m.emissiveIntensity = 0.0;
+    m.emissive          = new THREE.Color(0x1a3a88);
+    m.emissiveIntensity = 0;
     return m;
   }
 
-  static metal()      { return new THREE.MeshStandardMaterial({ color: 0xb0c0d0, roughness: 0.18, metalness: 0.92 }); }
-  static metalEscuro(){ return new THREE.MeshStandardMaterial({ color: 0x556677, roughness: 0.28, metalness: 0.88 }); }
-  static aluminio()   { return new THREE.MeshStandardMaterial({ color: 0xd0d8e0, roughness: 0.15, metalness: 0.95 }); }
-  static inversor()   { return new THREE.MeshStandardMaterial({ color: 0x1e2e1e, roughness: 0.45, metalness: 0.5  }); }
-  static cabo()       { return new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.72, metalness: 0.15 }); }
+  static metal()       { return new THREE.MeshStandardMaterial({ color: 0xb0c0d0, roughness: 0.18, metalness: 0.92 }); }
+  static metalEscuro() { return new THREE.MeshStandardMaterial({ color: 0x556677, roughness: 0.28, metalness: 0.88 }); }
+  static aluminio()    { return new THREE.MeshStandardMaterial({ color: 0xd0d8e0, roughness: 0.15, metalness: 0.96 }); }
+  static inversor()    { return new THREE.MeshStandardMaterial({ color: 0x1e2e1e, roughness: 0.45, metalness: 0.5  }); }
+  static cabo()        { return new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.72, metalness: 0.15 }); }
 
   static relva() {
     const tex = MaterialLibrary.#tex('relva', 512, 512, (ctx, w, h) => {
-      ctx.fillStyle = '#2f5a1e';
-      ctx.fillRect(0, 0, w, h);
-      for (let i = 0; i < 8000; i++) {
+      ctx.fillStyle = '#2f5a1e'; ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 9000; i++) {
         const x = Math.random() * w, y = Math.random() * h;
-        const hue = 95 + Math.random() * 35;
-        const sat = 40 + Math.random() * 25;
-        const lit = 18 + Math.random() * 18;
-        ctx.fillStyle = `hsl(${hue},${sat}%,${lit}%)`;
-        ctx.fillRect(x, y, 2.5, 2.5);
+        const hue = 95 + Math.random() * 35, sat = 38 + Math.random() * 28, lit = 18 + Math.random() * 20;
+        ctx.fillStyle = `hsl(${hue},${sat}%,${lit}%)`; ctx.fillRect(x, y, 2, 2);
       }
     });
-    tex.repeat.set(12, 12);
+    tex.repeat.set(14, 14);
     return new THREE.MeshStandardMaterial({ map: tex, roughness: 1.0, metalness: 0.0 });
   }
 
   static calcada() {
     const tex = MaterialLibrary.#tex('calcada', 256, 256, (ctx, w, h) => {
-      ctx.fillStyle = '#c8bfb0';
-      ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = '#a89880';
-      ctx.lineWidth = 2;
-      for (let x = 0; x < w; x += 48) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
-      for (let y = 0; y < h; y += 48) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+      ctx.fillStyle = '#c8bfb0'; ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#a89880'; ctx.lineWidth = 2;
+      for (let x = 0; x < w; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+      for (let y = 0; y < h; y += 50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
     });
     tex.repeat.set(4, 4);
     return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, metalness: 0.0 });
   }
 
-  static vidro() {
-    return new THREE.MeshStandardMaterial({
-      color: 0x88ccee, roughness: 0.04, metalness: 0.05,
-      transparent: true, opacity: 0.45,
-    });
-  }
+  static vidro()    { return new THREE.MeshStandardMaterial({ color: 0x88ccee, roughness: 0.04, metalness: 0.05, transparent: true, opacity: 0.42 }); }
 
   static madeira() {
     const tex = MaterialLibrary.#tex('madeira', 256, 256, (ctx, w, h) => {
       for (let y = 0; y < h; y++) {
-        const hue = 22 + Math.sin(y * 0.15) * 4;
-        const lit = 22 + Math.sin(y * 0.08) * 6;
-        ctx.fillStyle = `hsl(${hue},50%,${lit}%)`;
-        ctx.fillRect(0, y, w, 1);
+        const hue = 22 + Math.sin(y * 0.14) * 4, lit = 22 + Math.sin(y * 0.09) * 7;
+        ctx.fillStyle = `hsl(${hue},50%,${lit}%)`; ctx.fillRect(0, y, w, 1);
       }
     });
     tex.repeat.set(2, 3);
@@ -181,17 +172,14 @@ class MaterialLibrary {
 
   static concreto() {
     const tex = MaterialLibrary.#tex('concreto', 256, 256, (ctx, w, h) => {
-      ctx.fillStyle = '#c0b8a8';
-      ctx.fillRect(0, 0, w, h);
-      for (let i = 0; i < 2000; i++) {
-        const x = Math.random() * w, y = Math.random() * h;
-        const v = Math.random() * 30 - 15;
-        ctx.fillStyle = `rgba(${140 + v | 0},${132 + v | 0},${118 + v | 0},0.2)`;
-        ctx.fillRect(x, y, 3, 3);
+      ctx.fillStyle = '#c0b8a8'; ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 2500; i++) {
+        const x = Math.random() * w, y = Math.random() * h, v = (Math.random() - 0.5) * 30;
+        ctx.fillStyle = `rgba(${140 + v | 0},${132 + v | 0},${118 + v | 0},0.2)`; ctx.fillRect(x, y, 3, 3);
       }
     });
     tex.repeat.set(2, 2);
-    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.94, metalness: 0.0 });
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, metalness: 0.0 });
   }
 
   static dispose() {
@@ -201,11 +189,13 @@ class MaterialLibrary {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   HouseBuilder — monta casa 3D realista
+   HouseBuilder — casa 3D com geometria matematicamente consistente.
+   HouseBuilder.roofY(z)          → altitude Y da superfície do telhado em z
+   HouseBuilder.roofPoint(x,z,n)  → ponto 3D na superfície + offset normal n
    ───────────────────────────────────────────────────────────────────── */
 class HouseBuilder {
   #scene;
-  #group;
+  #grp;
 
   roof1Center = new THREE.Vector3();
   roof2Center = new THREE.Vector3();
@@ -215,327 +205,278 @@ class HouseBuilder {
   luzJanela2  = null;
   luzPoste    = null;
   caboParede  = null;
+  slopeAngle  = 0;
+  roofNormal  = [new THREE.Vector3(), new THREE.Vector3()];
 
   constructor(scene) {
     this.#scene = scene;
-    this.#group = new THREE.Group();
-    scene.add(this.#group);
+    this.#grp   = new THREE.Group();
+    scene.add(this.#grp);
+  }
+
+  /* altitude Y exata da superfície do telhado para uma coordenada Z */
+  static roofY(zWorld) {
+    const { FH, H, RA, D } = CASA;
+    return FH + H + RA * (1 - Math.abs(zWorld) / (D / 2));
+  }
+
+  /* ponto 3D na superfície do telhado + deslocamento ao longo da normal */
+  static roofPoint(x, z, normalOffset = 0) {
+    const { RA, D } = CASA;
+    const slope = Math.atan2(RA, D / 2);
+    const ny = Math.cos(slope);
+    const nz = -Math.sign(z || -0.001) * Math.sin(slope);
+    return v3(x, HouseBuilder.roofY(z) + normalOffset * ny, z + normalOffset * nz);
   }
 
   build() {
+    const { FH, H, RA, D } = CASA;
+    this.slopeAngle = Math.atan2(RA, D / 2);
+    const s = this.slopeAngle;
+    this.roofNormal[0].set(0,  Math.cos(s), -Math.sin(s));
+    this.roofNormal[1].set(0,  Math.cos(s),  Math.sin(s));
+
     this.#solo();
     this.#fundacao();
     this.#paredes();
     this.#telhado();
-    this.#beiral();
     this.#aberturas();
     this.#chamine();
     this.#jardim();
     this.#poste();
     this.#quadroEletrico();
     this.#luzes();
-    this.#calcularRefs();
-    this.#caboParede();
+    this.#buildCaboParede();
+
+    this.roof1Center.set(0, FH + H + RA * 0.5, -D / 4);
+    this.roof2Center.set(0, FH + H + RA * 0.5,  D / 4);
   }
 
   #solo() {
-    const g = new THREE.Group();
     const campo = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), MaterialLibrary.relva());
-    campo.rotation.x = -Math.PI / 2;
-    campo.receiveShadow = true;
-    g.add(campo);
-    const calc = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.08, 6), MaterialLibrary.calcada());
-    calc.position.set(0, 0.04, -CASA.D / 2 - 3.5);
-    calc.receiveShadow = true;
-    g.add(calc);
-    this.#group.add(g);
+    campo.rotation.x = -Math.PI / 2; campo.receiveShadow = true;
+    this.#grp.add(campo);
+    const calc = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.08, 5.5), MaterialLibrary.calcada());
+    calc.position.set(0, 0.04, -CASA.D / 2 - 3.2); calc.receiveShadow = true;
+    this.#grp.add(calc);
   }
 
   #fundacao() {
-    const m = new THREE.Mesh(
-      new THREE.BoxGeometry(CASA.W + 0.4, CASA.FH, CASA.D + 0.4),
-      MaterialLibrary.concreto()
-    );
-    m.position.y = CASA.FH / 2;
-    m.castShadow = m.receiveShadow = true;
-    this.#group.add(m);
+    const { W, D, FH } = CASA;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(W + 0.3, FH, D + 0.3), MaterialLibrary.concreto());
+    m.position.y = FH / 2; m.castShadow = m.receiveShadow = true;
+    this.#grp.add(m);
   }
 
   #paredes() {
+    const { W, H, D, FH, RA, WT } = CASA;
     const mat  = MaterialLibrary.reboco();
-    const yMid = CASA.FH + CASA.H / 2;
-    const T    = 0.28;
-    const { W, H, D, FH, RA } = CASA;
+    const yMid = FH + H / 2;
 
     for (const [w, h, d, x, y, z] of [
-      [W, H, T,  0,       yMid, -D / 2],
-      [W, H, T,  0,       yMid,  D / 2],
-      [T, H, D, -W / 2,   yMid,  0],
-      [T, H, D,  W / 2,   yMid,  0],
+      [W,  H, WT, 0,      yMid, -D / 2],
+      [W,  H, WT, 0,      yMid,  D / 2],
+      [WT, H, D, -W / 2,  yMid,  0],
+      [WT, H, D,  W / 2,  yMid,  0],
     ]) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-      m.position.set(x, y, z);
-      m.castShadow = m.receiveShadow = true;
-      this.#group.add(m);
+      m.position.set(x, y, z); m.castShadow = m.receiveShadow = true;
+      this.#grp.add(m);
     }
 
-    /* gables triangulares com extrusão */
-    for (const [zPos, ry] of [[-D / 2, 0], [D / 2, Math.PI]]) {
+    for (const [zPos, flip] of [[-D / 2, false], [D / 2, true]]) {
       const shape = new THREE.Shape();
-      shape.moveTo(-W / 2, 0);
-      shape.lineTo( W / 2, 0);
-      shape.lineTo(0, RA);
-      shape.closePath();
-      const geo = new THREE.ExtrudeGeometry(shape, { depth: T, bevelEnabled: false });
+      shape.moveTo(-W / 2, 0); shape.lineTo(W / 2, 0); shape.lineTo(0, RA); shape.closePath();
+      const geo = new THREE.ExtrudeGeometry(shape, { depth: WT, bevelEnabled: false });
       const m   = new THREE.Mesh(geo, mat);
-      m.position.set(0, FH + H, zPos - (ry ? -T : 0));
-      m.rotation.y = ry;
-      m.castShadow = true;
-      this.#group.add(m);
+      m.position.set(0, FH + H, flip ? D / 2 - WT : -D / 2);
+      if (flip) m.rotation.y = Math.PI;
+      m.castShadow = true; this.#grp.add(m);
     }
   }
 
   #telhado() {
     const { W, D, H, FH, RA, EV } = CASA;
-    const mat    = MaterialLibrary.telha();
-    const slope  = Math.atan2(RA, D / 2);
-    const sLen   = Math.hypot(RA, D / 2) + EV + 0.1;
+    const slope = Math.atan2(RA, D / 2);
+    const sLen  = Math.hypot(RA, D / 2) + EV;
+    const mat   = MaterialLibrary.telha();
 
     for (const sign of [-1, 1]) {
-      const m = new THREE.Mesh(
-        new THREE.PlaneGeometry(W + EV * 2, sLen, 1, 8),
-        mat
-      );
-      m.rotation.x = sign * slope - Math.PI / 2;
-      m.position.set(0, FH + H + RA / 2, sign * (D / 4 + EV * 0.3));
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(W + EV * 2, sLen, 1, 8), mat.clone());
+      /*
+        Agua de frente (sign=-1): inclina para baixo em -Z
+          rotation.x = +(PI/2 - slope)  → face voltada para cima/frente
+        Água de trás (sign=+1): inclina para baixo em +Z
+          rotation.x = -(PI/2 - slope)  → face voltada para cima/trás
+      */
+      m.rotation.x  = sign > 0 ? -(Math.PI / 2 - slope) : (Math.PI / 2 - slope);
+      const yCenter = FH + H + RA / 2;
+      const zOff    = sign * (sLen / 2 * Math.cos(slope));
+      m.position.set(0, yCenter, zOff);
       m.castShadow = m.receiveShadow = true;
-      this.#group.add(m);
+      this.#grp.add(m);
     }
 
-    const ridge = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.055, 0.055, D + EV * 2, 8),
-      MaterialLibrary.metalEscuro()
-    );
-    ridge.rotation.x = Math.PI / 2;
-    ridge.position.set(0, FH + H + RA, 0);
-    ridge.castShadow = true;
-    this.#group.add(ridge);
-  }
+    const ridge = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, W + EV * 2, 8), MaterialLibrary.metalEscuro());
+    ridge.rotation.z = Math.PI / 2; ridge.position.set(0, FH + H + RA + 0.02, 0);
+    ridge.castShadow = true; this.#grp.add(ridge);
 
-  #beiral() {
-    const { W, D, FH, H, EV } = CASA;
-    const mat = MaterialLibrary.concreto();
-    for (const z of [-D / 2, D / 2]) {
-      const b = new THREE.Mesh(
-        new THREE.BoxGeometry(W + EV * 2, 0.08, EV + 0.1),
-        mat
-      );
-      b.position.set(0, FH + H, z + (z < 0 ? -EV * 0.5 : EV * 0.5));
-      b.castShadow = true;
-      this.#group.add(b);
+    for (const side of [-1, 1]) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(WT * 0.6, WT * 0.6, D + EV * 2), MaterialLibrary.madeira());
+      b.position.set(side * (W / 2 + EV * 0.5), FH + H + RA * 0.05, 0);
+      b.castShadow = true; this.#grp.add(b);
     }
   }
 
   #aberturas() {
-    const { W, D, H, FH } = CASA;
-    const yWall = FH + H / 2;
+    const { W, D, H, FH, WT } = CASA;
+    const yWall = FH + H * 0.55;
     const matV  = MaterialLibrary.vidro();
     const matM  = MaterialLibrary.madeira();
 
     const janela = (x, z, ry) => {
-      const outer = new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.15, 0.1), matM);
-      outer.position.set(x, yWall + 0.2, z);
-      outer.rotation.y = ry;
-      const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), matV);
-      glass.position.set(x, yWall + 0.2, z + (ry === 0 ? -0.06 : 0.06));
-      glass.rotation.y = ry;
-      const bH = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.04, 0.04), matM);
-      bH.position.copy(glass.position);
-      const bV = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.9, 0.04), matM);
-      bV.position.copy(glass.position);
-      this.#group.add(outer, glass, bH, bV);
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.1, WT + 0.04), matM);
+      frame.position.set(x, yWall, z); frame.rotation.y = ry;
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.86, 0.04), matV);
+      glass.position.set(x, yWall, z); glass.rotation.y = ry;
+      const th = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.04, 0.04), matM);
+      th.position.copy(glass.position);
+      const tv = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.86, 0.04), matM);
+      tv.position.copy(glass.position);
+      this.#grp.add(frame, glass, th, tv);
     };
 
-    janela(-W / 3, -D / 2 - 0.01, 0);
-    janela( W / 3, -D / 2 - 0.01, 0);
-    janela(-W / 3,  D / 2 + 0.01, Math.PI);
+    janela(-W / 3.2, -D / 2 - 0.01, 0);
+    janela( W / 3.2, -D / 2 - 0.01, 0);
+    janela(-W / 3.2,  D / 2 + 0.01, Math.PI);
 
-    const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.2, 0.12), matM);
-    doorFrame.position.set(0, FH + 1.1, -D / 2 - 0.02);
-    const door = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.0, 0.06), matM);
-    door.position.set(0.08, FH + 1.0, -D / 2 - 0.08);
-    const step = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.14, 0.45), MaterialLibrary.concreto());
-    step.position.set(0, FH + 0.07, -D / 2 - 0.28);
-    this.#group.add(doorFrame, door, step);
+    const pFrame = new THREE.Mesh(new THREE.BoxGeometry(1.15, 2.1, WT + 0.04), matM);
+    pFrame.position.set(0, FH + 1.05, -D / 2 - 0.01);
+    const pDoor = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.95, 0.05), matM);
+    pDoor.position.set(0.1, FH + 0.975, -D / 2 - WT * 0.5 - 0.02);
+    const step = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 0.4), MaterialLibrary.concreto());
+    step.position.set(0, FH + 0.06, -D / 2 - 0.25);
+    this.#grp.add(pFrame, pDoor, step);
   }
 
   #chamine() {
-    const { W, D, FH, H, RA } = CASA;
-    const mat  = MaterialLibrary.concreto();
-    const cx   = W / 4, cz = D / 6;
-    const cH   = H * 0.65 + RA * 0.6;
-    const yBot = FH + H * 0.6;
-
-    const corpo = new THREE.Mesh(new THREE.BoxGeometry(0.55, cH, 0.55), mat);
-    corpo.position.set(cx, yBot + cH / 2, cz);
-    corpo.castShadow = true;
-    this.#group.add(corpo);
-
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.12, 0.72), MaterialLibrary.metalEscuro());
-    cap.position.set(cx, FH + H + RA * 0.9, cz);
-    this.#group.add(cap);
+    const { W, D } = CASA;
+    const cx = W / 4, cz = D / 5;
+    const yBase = HouseBuilder.roofY(cz) - 0.1;
+    const corpo = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.6, 0.5), MaterialLibrary.concreto());
+    corpo.position.set(cx, yBase + 0.8, cz); corpo.castShadow = true;
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.1, 0.66), MaterialLibrary.metalEscuro());
+    cap.position.set(cx, yBase + 1.65, cz);
+    this.#grp.add(corpo, cap);
   }
 
   #jardim() {
     const { W, D } = CASA;
     const matB = new THREE.MeshStandardMaterial({ color: 0x2a6018, roughness: 0.9 });
-
     for (const [x, z, r] of [
-      [-W / 2 - 0.6, -D / 2 - 0.6, 0.55],
-      [ W / 2 + 0.6, -D / 2 - 0.6, 0.55],
-      [-W / 2 - 0.5,  D / 2 + 0.4, 0.42],
+      [-W / 2 - 0.55, -D / 2 - 0.55, 0.52],
+      [ W / 2 + 0.55, -D / 2 - 0.55, 0.52],
+      [-W / 2 - 0.45,  D / 2 + 0.35, 0.4 ],
     ]) {
-      const bush = new THREE.Mesh(new THREE.SphereGeometry(r, 9, 7), matB);
-      bush.position.set(x, r, z);
-      bush.castShadow = true;
-      this.#group.add(bush);
+      const b = new THREE.Mesh(new THREE.SphereGeometry(r, 9, 7), matB);
+      b.position.set(x, r, z); b.castShadow = true; this.#grp.add(b);
     }
-
-    /* árvore */
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 2.5, 8), MaterialLibrary.madeira());
-    trunk.position.set(-W / 2 - 2.5, 1.25, -D / 2 + 1);
-    trunk.castShadow = true;
-    this.#group.add(trunk);
-
-    const copa = new THREE.Mesh(
-      new THREE.SphereGeometry(1.3, 9, 7),
-      new THREE.MeshStandardMaterial({ color: 0x1e5c10, roughness: 0.95 })
-    );
-    copa.position.set(-W / 2 - 2.5, 3.3, -D / 2 + 1);
-    copa.castShadow = true;
-    this.#group.add(copa);
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 2.4, 8), MaterialLibrary.madeira());
+    trunk.position.set(-W / 2 - 2.4, 1.2, -D / 2 + 0.8); trunk.castShadow = true; this.#grp.add(trunk);
+    const copa = new THREE.Mesh(new THREE.SphereGeometry(1.25, 9, 7),
+      new THREE.MeshStandardMaterial({ color: 0x1e5c10, roughness: 0.95 }));
+    copa.position.set(-W / 2 - 2.4, 3.2, -D / 2 + 0.8); copa.castShadow = true; this.#grp.add(copa);
   }
 
   #poste() {
     const { W, D } = CASA;
-    const px = W / 2 + 5, pz = -D * 0.45;
-
+    const px = W / 2 + 5.5, pz = -D * 0.4;
     const haste = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.1, 7, 8), MaterialLibrary.metal());
-    haste.position.set(px, 3.5, pz);
-    haste.castShadow = true;
-    this.#group.add(haste);
-
+    haste.position.set(px, 3.5, pz); haste.castShadow = true; this.#grp.add(haste);
     const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.2, 6), MaterialLibrary.metal());
-    arm.rotation.z = Math.PI / 2;
-    arm.position.set(px - 0.6, 7.15, pz);
-    this.#group.add(arm);
-
-    const shade = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.22, 0.14, 0.35, 10),
-      new THREE.MeshStandardMaterial({ color: 0x3a3a3a })
-    );
-    shade.position.set(px - 1.2, 7.0, pz);
-    this.#group.add(shade);
-
+    arm.rotation.z = Math.PI / 2; arm.position.set(px - 0.6, 7.15, pz); this.#grp.add(arm);
+    const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.14, 0.35, 10),
+      new THREE.MeshStandardMaterial({ color: 0x3a3a3a }));
+    shade.position.set(px - 1.2, 7.0, pz); this.#grp.add(shade);
     this.poleTop.set(px - 1.2, 7.1, pz);
-
-    const wireCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(px, 7, pz),
-      new THREE.Vector3(W / 2 + 2, 6.5, pz * 0.5),
-      new THREE.Vector3(W / 2 + 0.1, 5.5, 0),
+    const wc = new THREE.CatmullRomCurve3([
+      v3(px, 7, pz), v3(W / 2 + 3, 6.2, pz * 0.6), v3(W / 2 + 0.15, 5.6, 0),
     ]);
-    this.#group.add(new THREE.Mesh(
-      new THREE.TubeGeometry(wireCurve, 24, 0.018, 5, false),
-      MaterialLibrary.cabo()
-    ));
+    this.#grp.add(new THREE.Mesh(new THREE.TubeGeometry(wc, 24, 0.018, 5, false), MaterialLibrary.cabo()));
   }
 
   #quadroEletrico() {
-    const { W, D, FH, H } = CASA;
-    const qx = W / 2 + 0.02, qy = FH + H * 0.45, qz = D * 0.32;
+    const { W, D, FH, H, WT } = CASA;
+    const qx = W / 2 + WT / 2 + 0.01;
+    const qy = FH + H * 0.46;
+    const qz = D * 0.3;
 
-    const caixa = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.72, 0.15), MaterialLibrary.metalEscuro());
-    caixa.position.set(qx, qy, qz);
-    caixa.rotation.y = -Math.PI / 2;
-    caixa.scale.set(0, 0, 0);
-    caixa.name = 'quadro';
-    this.#group.add(caixa);
+    const caixa = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.72, 0.54), MaterialLibrary.metalEscuro());
+    caixa.position.set(qx, qy, qz); caixa.scale.set(0, 0, 0); caixa.name = 'quadro';
+    this.#grp.add(caixa);
 
-    const led = new THREE.Mesh(
-      new THREE.BoxGeometry(0.3, 0.12, 0.04),
-      new THREE.MeshStandardMaterial({ color: 0x003300, emissive: 0x002200, emissiveIntensity: 0 })
-    );
-    led.position.set(qx - 0.01, qy + 0.15, qz);
-    led.rotation.y = -Math.PI / 2;
-    led.name = 'quadro-led';
-    this.#group.add(led);
+    const led = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.3),
+      new THREE.MeshStandardMaterial({ color: 0x003300, emissive: 0x002200, emissiveIntensity: 0 }));
+    led.position.set(qx + 0.08, qy + 0.16, qz); led.name = 'quadro-led';
+    this.#grp.add(led);
 
-    const disj = new THREE.Mesh(
-      new THREE.BoxGeometry(0.1, 0.22, 0.08),
-      new THREE.MeshStandardMaterial({ color: 0xdd1111, emissive: 0x330000 })
-    );
-    disj.position.set(qx - 0.01, qy - 0.08, qz + 0.06);
-    disj.rotation.y = -Math.PI / 2;
-    disj.scale.set(0, 0, 0);
-    disj.name = 'disjuntor';
-    this.#group.add(disj);
+    const disj = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.09),
+      new THREE.MeshStandardMaterial({ color: 0xdd1111, emissive: 0x330000 }));
+    disj.position.set(qx + 0.08, qy - 0.08, qz + 0.06); disj.scale.set(0, 0, 0); disj.name = 'disjuntor';
+    this.#grp.add(disj);
 
     this.quadroPos.set(qx, qy, qz);
   }
 
   #luzes() {
     const { W, D, FH, H } = CASA;
-
-    this.luzJanela1 = new THREE.PointLight(0xFFE080, 0, 6);
-    this.luzJanela1.position.set(-W / 3, FH + H * 0.65, -D / 2 + 0.8);
+    this.luzJanela1 = new THREE.PointLight(0xFFE080, 0, 5.5);
+    this.luzJanela1.position.set(-W / 3.2, FH + H * 0.62, -D / 2 + 0.8);
     this.#scene.add(this.luzJanela1);
-
-    this.luzJanela2 = new THREE.PointLight(0xFFE080, 0, 6);
-    this.luzJanela2.position.set(W / 3, FH + H * 0.65, -D / 2 + 0.8);
+    this.luzJanela2 = new THREE.PointLight(0xFFE080, 0, 5.5);
+    this.luzJanela2.position.set( W / 3.2, FH + H * 0.62, -D / 2 + 0.8);
     this.#scene.add(this.luzJanela2);
-
     this.luzPoste = new THREE.SpotLight(0xFFF8CC, 0, 18, Math.PI / 6, 0.35);
     this.luzPoste.position.copy(this.poleTop);
     this.luzPoste.target.position.set(this.poleTop.x - 3, 0, this.poleTop.z);
     this.#scene.add(this.luzPoste, this.luzPoste.target);
   }
 
-  #calcularRefs() {
-    const { D, FH, H, RA } = CASA;
-    this.roof1Center.set(0, FH + H + RA * 0.45, -D / 4);
-    this.roof2Center.set(0, FH + H + RA * 0.45,  D / 4);
-  }
-
-  #caboParede() {
-    const { W, D, FH, H } = CASA;
+  #buildCaboParede() {
+    const { W, D, FH, H, WT } = CASA;
     const qPos = this.quadroPos;
+    /* cabo corre pela face EXTERIOR da parede direita: x = W/2 + WT/2 + 0.04 */
+    const xExt = W / 2 + WT / 2 + 0.04;
     const curve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(W / 2 - 0.01, FH + H * 0.48, -(D / 2 - 0.4)),
-      new THREE.Vector3(W / 2 + 0.03, FH + H + 0.1,  -(D / 2 - 0.4) * 0.5),
-      new THREE.Vector3(W / 2 + 0.03, FH + H * 0.72,   qPos.z * 0.5),
-      new THREE.Vector3(qPos.x,       qPos.y + 0.2,     qPos.z),
+      v3(xExt, FH + H + 0.08, -D * 0.22),
+      v3(xExt, FH + H * 0.78,  D * 0.05),
+      v3(xExt, FH + H * 0.58,  qPos.z * 0.6),
+      v3(xExt, qPos.y,          qPos.z),
     ]);
-    const geo = new THREE.TubeGeometry(curve, 40, 0.022, 6, false);
+    const geo  = new THREE.TubeGeometry(curve, 48, 0.022, 6, false);
     geo.setDrawRange(0, 0);
     const mesh = new THREE.Mesh(geo, MaterialLibrary.cabo());
     mesh.castShadow = true;
-    this.#group.add(mesh);
-    this.caboParede = { mesh, curve, totalCount: geo.index.count };
+    this.#grp.add(mesh);
+    this.caboParede = { mesh, totalCount: geo.index.count };
   }
 
   animarCaboParede(p) {
     if (!this.caboParede) return;
-    this.caboParede.mesh.geometry.setDrawRange(0, Math.round(p * this.caboParede.totalCount));
+    this.caboParede.mesh.geometry.setDrawRange(0, Math.round(clamp01(p) * this.caboParede.totalCount));
   }
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   SolarInstaller — trilhos, cabos, inversores e painéis por água
+   SolarInstaller — trilhos, cabos, inversores e painéis por água.
+   Todos os objetos usam HouseBuilder.roofPoint() como fonte de verdade.
    ───────────────────────────────────────────────────────────────────── */
 class SolarInstaller {
   #scene;
   #side;
-  #group;
+  #grp;
+  #slopeAngle;
+  #normal;
 
   #trilhos    = [];
   #cabos      = [];
@@ -546,17 +487,17 @@ class SolarInstaller {
   static COLS = 3;
   static ROWS = 2;
 
-  constructor(scene, side) {
-    this.#scene = scene;
-    this.#side  = side;
-    this.#group = new THREE.Group();
-    scene.add(this.#group);
+  constructor(scene, side, houseRef) {
+    this.#scene      = scene;
+    this.#side       = side;
+    this.#grp        = new THREE.Group();
+    this.#slopeAngle = houseRef.slopeAngle;
+    this.#normal     = houseRef.roofNormal[side === 'front' ? 0 : 1].clone();
+    scene.add(this.#grp);
   }
 
-  #sz()    { return this.#side === 'front' ? -1 : 1; }
-  #slope() { return Math.atan2(CASA.RA, CASA.D / 2); }
-  #baseY() { return CASA.FH + CASA.H + CASA.RA * 0.5; }
-  #baseZ() { return this.#sz() * CASA.D / 4; }
+  #sz()      { return this.#side === 'front' ? -1 : 1; }
+  #zCenter() { return this.#sz() * CASA.D / 4; }
 
   build() {
     this.#buildTrilhos();
@@ -566,108 +507,106 @@ class SolarInstaller {
   }
 
   #buildTrilhos() {
-    const { W } = CASA;
+    const { W, D } = CASA;
+    const COLS = SolarInstaller.COLS;
+    const ROWS = SolarInstaller.ROWS;
     const mat  = MaterialLibrary.aluminio();
-    const cols = SolarInstaller.COLS;
-    const step = (W - 1.2) / (cols - 1);
-    const rLen = CASA.D * 0.38;
+    const pH   = (D * 0.32) / ROWS - 0.05;
+    const step = (W - 1.2) / (COLS - 1);
 
-    for (let c = 0; c < cols; c++) {
-      const x    = -W / 2 + 0.6 + c * step;
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, rLen), mat);
-      mesh.position.set(x, this.#baseY(), this.#baseZ());
-      mesh.rotation.x = this.#sz() * this.#slope();
-      mesh.scale.set(0, 1, 1);
+    for (let c = 0; c < COLS; c++) {
+      const x  = -W / 2 + 0.6 + c * step;
+      const zT = this.#sz() * (D / 4 + (ROWS / 2) * (pH + 0.06) * 0.55);
+      const zB = this.#sz() * (D / 4 - (ROWS / 2) * (pH + 0.06) * 0.55);
+      const pA = HouseBuilder.roofPoint(x, zT, 0.04);
+      const pM = HouseBuilder.roofPoint(x, this.#zCenter(), 0.04);
+      const pB = HouseBuilder.roofPoint(x, zB, 0.04);
+      const curve = new THREE.CatmullRomCurve3([pA, pM, pB]);
+      const geo   = new THREE.TubeGeometry(curve, 20, 0.025, 6, false);
+      const mesh  = new THREE.Mesh(geo, mat);
       mesh.castShadow = true;
+      mesh.scale.y = 0;  /* escala Y=0 → cresce para 1 durante animação */
       this.#trilhos.push(mesh);
-      this.#group.add(mesh);
+      this.#grp.add(mesh);
     }
   }
 
   #buildCabos() {
-    const { W, FH, H } = CASA;
-    const bY = this.#baseY(), bZ = this.#baseZ();
+    const { W, D } = CASA;
 
-    for (const offset of [-0.08, 0.08]) {
-      const p0 = new THREE.Vector3(-W / 2 + 0.3, bY + offset * 0.3, bZ);
-      const pM = new THREE.Vector3(0,             bY + 0.18,         bZ);
-      const p1 = new THREE.Vector3( W / 2 - 0.3, bY + offset * 0.3, bZ);
-      const curve = new THREE.QuadraticBezierCurve3(p0, pM, p1);
+    for (const rowFrac of [0.3, 0.7]) {
+      const zC  = this.#sz() * (D * rowFrac * 0.45);
+      const pts = [];
+      for (let i = 0; i <= 8; i++) {
+        const x = -W / 2 + 0.3 + i * ((W - 0.6) / 8);
+        pts.push(HouseBuilder.roofPoint(x, zC, 0.06));
+      }
+      const curve = new THREE.CatmullRomCurve3(pts);
       this.#curves.push(curve);
-      const geo   = new THREE.TubeGeometry(curve, 32, 0.018, 5, false);
+      const geo   = new THREE.TubeGeometry(curve, 40, 0.018, 5, false);
       geo.setDrawRange(0, 0);
       const mesh  = new THREE.Mesh(geo, MaterialLibrary.cabo());
       this.#cabos.push({ mesh, totalCount: geo.index.count });
-      this.#group.add(mesh);
+      this.#grp.add(mesh);
     }
 
-    const invX = W / 2 - 0.35;
-    const invZ = this.#sz() * (CASA.D / 2 - 0.4);
+    const { FH, H } = CASA;
+    const xDrop = W / 2 - 0.3;
+    const zDrop = this.#sz() * (D / 2 - 0.35);
+    const zInv  = this.#sz() * (D / 2 - 0.38);
     const dropCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(W / 2 - 0.3, bY, bZ),
-      new THREE.Vector3(invX, FH + H * 0.75, invZ * 0.8),
-      new THREE.Vector3(invX, FH + H * 0.5,  invZ),
+      HouseBuilder.roofPoint(xDrop, this.#zCenter(), 0.06),
+      v3(xDrop, FH + H * 0.82, zDrop * 0.85),
+      v3(W / 2 - 0.28, FH + H * 0.52, zInv),
     ]);
     this.#curves.push(dropCurve);
-    const dropGeo  = new THREE.TubeGeometry(dropCurve, 24, 0.018, 5, false);
+    const dropGeo = new THREE.TubeGeometry(dropCurve, 24, 0.018, 5, false);
     dropGeo.setDrawRange(0, 0);
-    this.#cabos.push({ mesh: new THREE.Mesh(dropGeo, MaterialLibrary.cabo()), totalCount: dropGeo.index.count });
-    this.#group.add(this.#cabos[this.#cabos.length - 1].mesh);
+    const dropMesh = new THREE.Mesh(dropGeo, MaterialLibrary.cabo());
+    this.#cabos.push({ mesh: dropMesh, totalCount: dropGeo.index.count });
+    this.#grp.add(dropMesh);
   }
 
   #buildInversores() {
     const { W, D, FH, H } = CASA;
     const invX = W / 2 - 0.01;
-    const invZ = this.#sz() * (D / 2 - 0.4);
-    const invY = FH + H * 0.48;
+    const invZ = this.#sz() * (D / 2 - 0.38);
+    const invY = FH + H * 0.46;
 
-    const corpo = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.52, 0.36), MaterialLibrary.inversor());
-    corpo.position.set(invX, invY, invZ);
-    corpo.rotation.y = -Math.PI / 2;
-    corpo.scale.y = 0;
+    const corpo = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.5, 0.34), MaterialLibrary.inversor());
+    corpo.position.set(invX, invY, invZ); corpo.rotation.y = -Math.PI / 2; corpo.scale.y = 0;
     corpo.name = `inversor-${this.#side}`;
-
-    const lcd = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.18, 0.1),
-      new THREE.MeshStandardMaterial({ color: 0x00aa44, emissive: 0x003311, emissiveIntensity: 0.8 })
-    );
-    lcd.position.set(invX + 0.09, invY + 0.1, invZ);
-    lcd.rotation.y = Math.PI / 2;
-
+    const lcd = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.1),
+      new THREE.MeshStandardMaterial({ color: 0x00aa44, emissive: 0x003311, emissiveIntensity: 0.8 }));
+    lcd.position.set(invX + 0.09, invY + 0.1, invZ); lcd.rotation.y = Math.PI / 2;
     this.#inversores.push({ corpo, lcd });
-    this.#group.add(corpo, lcd);
+    this.#grp.add(corpo, lcd);
   }
 
   #buildPaineis() {
-    const { W } = CASA;
-    const cols  = SolarInstaller.COLS;
-    const rows  = SolarInstaller.ROWS;
-    const slope = this.#slope();
-    const pW    = (W - 1.4) / cols - 0.06;
-    const pH    = CASA.D * 0.34 / rows - 0.06;
+    const { W, D } = CASA;
+    const COLS = SolarInstaller.COLS;
+    const ROWS = SolarInstaller.ROWS;
+    const pW   = (W - 1.3) / COLS - 0.06;
+    const pH   = (D * 0.32) / ROWS - 0.05;
+    const mat  = MaterialLibrary.painelEmissivo();
 
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const x       = -W / 2 + 0.7 + (c + 0.5) * ((W - 1.4) / cols);
-        const zOffset = (r - (rows - 1) / 2) * (pH + 0.06);
-        const alvoY   = this.#baseY() + 0.05;
-        const alvoZ   = this.#baseZ() + this.#sz() * zOffset * Math.cos(slope);
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const xC   = -W / 2 + 0.65 + (c + 0.5) * ((W - 1.3) / COLS);
+        const zOff = (r - (ROWS - 1) / 2) * (pH + 0.06);
+        const zC   = this.#sz() * (D / 4) + this.#sz() * zOff;
+        const alvo = HouseBuilder.roofPoint(xC, zC, 0.03);
 
-        const panel = new THREE.Mesh(
-          new THREE.BoxGeometry(pW, 0.04, pH),
-          MaterialLibrary.painelEmissivo()
-        );
-        panel.rotation.x = this.#sz() * (slope - Math.PI / 2);
-        panel.position.set(x, alvoY + 8, alvoZ);
-        panel.castShadow = true;
-        panel.receiveShadow = true;
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(pW, 0.04, pH), mat.clone());
+        panel.rotation.x = this.#sz() > 0
+          ? -(Math.PI / 2 - this.#slopeAngle)
+          :  (Math.PI / 2 - this.#slopeAngle);
+        panel.position.copy(alvo).add(v3(0, 10, 0));
+        panel.castShadow = panel.receiveShadow = true;
 
-        this.#paineis.push({
-          mesh:  panel,
-          alvoY,
-          delay: (c + r * cols) / (cols * rows),
-        });
-        this.#group.add(panel);
+        this.#paineis.push({ mesh: panel, alvo, delay: (c + r * COLS) / (COLS * ROWS) });
+        this.#grp.add(panel);
       }
     }
   }
@@ -675,55 +614,41 @@ class SolarInstaller {
   /* ── Animadores ── */
 
   animarTrilhos(p) {
-    const t = SolarInstaller.#easeOutBack(Math.min(p, 1));
-    for (const m of this.#trilhos) m.scale.x = t;
+    const t = easeOutBack(clamp01(p));
+    for (const m of this.#trilhos) m.scale.y = t;
   }
 
   animarCabos(p) {
-    for (const c of this.#cabos) {
-      c.mesh.geometry.setDrawRange(0, Math.round(p * c.totalCount));
-    }
+    for (const c of this.#cabos)
+      c.mesh.geometry.setDrawRange(0, Math.round(clamp01(p) * c.totalCount));
   }
 
   animarInversores(p) {
-    const t = SolarInstaller.#easeOutBack(Math.min(p, 1));
+    const t = easeOutBack(clamp01(p));
     for (const inv of this.#inversores) inv.corpo.scale.y = t;
   }
 
   animarPaineis(p) {
+    const N = this.#paineis.length;
     for (const item of this.#paineis) {
-      const local = Math.max(0, Math.min(1, (p - item.delay) / (1 - item.delay / this.#paineis.length + 0.01)));
+      const local = clamp01((p - item.delay) / (1 - item.delay / (N + 0.01)));
       if (local <= 0) continue;
-
-      /* spring physics: y = alvo + (1-easeIn) * 8 + bounce */
-      const t       = local;
-      const omega   = 10;
-      const damping = 0.5;
-      const spring  = Math.exp(-damping * omega * t * 2.5) * Math.cos(omega * t * 2.5);
-      item.mesh.position.y = item.alvoY + (1 - SolarInstaller.#easeInCubic(t)) * 8 + spring * 0.3;
+      const spring = Math.exp(-5 * local * 2) * Math.cos(9 * local * 2);
+      item.mesh.position.x = item.alvo.x;
+      item.mesh.position.y = item.alvo.y + (1 - easeInOut(local)) * 10 + spring * 0.25;
+      item.mesh.position.z = item.alvo.z;
     }
   }
 
   ativarEmissivo(intensity) {
-    for (const item of this.#paineis) {
-      item.mesh.material.emissiveIntensity = intensity;
-    }
+    for (const item of this.#paineis) item.mesh.material.emissiveIntensity = intensity;
   }
 
   getCurves() { return [...this.#curves]; }
-
-  static #easeOutBack(t) {
-    const c1 = 1.70158, c3 = c1 + 1;
-    if (t <= 0) return 0;
-    if (t >= 1) return 1;
-    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-  }
-
-  static #easeInCubic(t) { return t * t * t; }
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   EnergyFlow — orbs de energia percorrendo os cabos do sistema solar
+   EnergyFlow — orbs de energia percorrendo os cabos
    ───────────────────────────────────────────────────────────────────── */
 class EnergyFlow {
   #scene;
@@ -732,9 +657,7 @@ class EnergyFlow {
 
   constructor(scene) { this.#scene = scene; }
 
-  addCurves(curves) {
-    for (const c of curves) this.#curves.push(c);
-  }
+  addCurves(curves) { for (const c of curves) this.#curves.push(c); }
 
   build() {
     for (let i = 0; i < 4; i++) {
@@ -757,13 +680,45 @@ class EnergyFlow {
     }
   }
 
-  reset() {
-    for (const orb of this.#orbs) orb.light.intensity = 0;
-  }
+  reset() { for (const orb of this.#orbs) orb.light.intensity = 0; }
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   ModelLoader — orquestra HouseBuilder + SolarInstaller
+   SoundController — efeitos sonoros via Web Audio API
+   ───────────────────────────────────────────────────────────────────── */
+class SoundController {
+  #ctx = null;
+
+  #getCtx() {
+    if (!this.#ctx) this.#ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (this.#ctx.state === 'suspended') this.#ctx.resume();
+    return this.#ctx;
+  }
+
+  #beep(freq, endFreq, gain, duration) {
+    try {
+      const ctx = this.#getCtx();
+      const osc = ctx.createOscillator();
+      const vol = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(endFreq, ctx.currentTime + duration);
+      vol.gain.setValueAtTime(gain, ctx.currentTime);
+      vol.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+      osc.connect(vol); vol.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + duration);
+    } catch (_) { /* browser pode bloquear */ }
+  }
+
+  tocarEncaixe()  { this.#beep(820,  440, 0.12, 0.18); }
+  tocarEletrico() { this.#beep(120,   80, 0.08, 0.35); }
+  tocarLuz()      { this.#beep(1200, 600, 0.06, 0.22); }
+
+  dispose() { this.#ctx?.close(); this.#ctx = null; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   ModelLoader — orquestra HouseBuilder + dois SolarInstaller
    ───────────────────────────────────────────────────────────────────── */
 class ModelLoader {
   #scene;
@@ -776,134 +731,98 @@ class ModelLoader {
   load() {
     this.house  = new HouseBuilder(this.#scene);
     this.house.build();
-    this.solar1 = new SolarInstaller(this.#scene, 'front');
+    this.solar1 = new SolarInstaller(this.#scene, 'front', this.house);
     this.solar1.build();
-    this.solar2 = new SolarInstaller(this.#scene, 'back');
+    this.solar2 = new SolarInstaller(this.#scene, 'back',  this.house);
     this.solar2.build();
   }
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   CameraController — waypoints drone cinematográficos
+   CameraController — lerp acumulativo, sem saltos entre estágios
    ───────────────────────────────────────────────────────────────────── */
 class CameraController {
   #camera;
-  #wp = {};
+  #pos;
+  #tgt;
+  #targetPos;
+  #targetTgt;
   #orbitAngle = 0;
+  #orbiting   = false;
+  #smooth     = 0.06;
 
-  constructor(camera) { this.#camera = camera; }
-
-  configure(house) {
-    const { W, D, FH, H, RA } = CASA;
-    const ridge = new THREE.Vector3(0, FH + H + RA, 0);
-    const r1    = house.roof1Center.clone();
-    const r2    = house.roof2Center.clone();
-    const qPos  = house.quadroPos.clone();
-    const walR  = new THREE.Vector3(W / 2 + 3.5, FH + H * 0.5, 0);
-
-    this.#wp = {
-      0:  { from: v3(0, 22, 2),                     to: v3(4, 14, -14),                         look: ridge  },
-      1:  { from: v3(4, 14, -14),                    to: v3(-1, 11, -13),                        look: r1     },
-      2:  { from: v3(-1, 11, -13),                   to: v3(0, 10, -12),                         look: r1     },
-      3:  { from: v3(0, 10, -12),                    to: v3(walR.x+1, walR.y+2, -D*0.4),         look: r1     },
-      4:  { from: v3(walR.x+1, walR.y+2, -D*0.4),   to: v3(walR.x,   walR.y+1, -D*0.4),         look: r1     },
-      5:  { from: v3(walR.x,   walR.y+1, -D*0.4),   to: v3(walR.x,   walR.y+1, -D*0.4),         look: r1     },
-      6:  { from: v3(walR.x,   walR.y+1, -D*0.4),   to: v3(-1, 11, 13),                         look: r2     },
-      7:  { from: v3(-1, 11, 13),                    to: v3(0, 10, 12),                          look: r2     },
-      8:  { from: v3(0, 10, 12),                     to: v3(walR.x+1, walR.y+2, D*0.4),          look: r2     },
-      9:  { from: v3(walR.x+1, walR.y+2, D*0.4),    to: v3(walR.x,   walR.y+1, D*0.4),          look: r2     },
-      10: { from: v3(walR.x,   walR.y+1, D*0.4),    to: v3(walR.x,   walR.y+1, D*0.4),          look: r2     },
-      11: { from: v3(walR.x,   walR.y+1, D*0.4),    to: v3(W/2+2, FH+H*0.5, D*0.35),            look: qPos   },
-      12: { from: v3(W/2+2, FH+H*0.5, D*0.35),      to: v3(W/2+1.4, FH+H*0.45, D*0.32),         look: qPos   },
-      13: { from: v3(W/2+1.4, FH+H*0.45, D*0.32),   to: v3(W/2+1.4, FH+H*0.45, D*0.32),         look: qPos   },
-      /* ── seqüncia fluxo de energia ── */
-      15: { from: v3(walR.x-2, walR.y+2, 0),          to: v3(walR.x-2, walR.y+2, 0),               look: v3(0, FH+H+RA*0.5, 0)     },
-      16: { from: v3(walR.x-2, walR.y+2, 0),          to: v3(walR.x+0.5, walR.y+1.5, -D*0.2),      look: r1                        },
-      17: { from: v3(W/2+2.5, FH+H+RA*0.3, D*0.28),   to: v3(W/2+2.5, FH+H*0.38, D*0.32),         look: qPos                      },
-      18: { from: v3(W/2+2.5, FH+H*0.38, D*0.32),     to: v3(0, 9, -20),                           look: v3(0, FH+H*0.5, 0)        },
-      19: { from: v3(0, 9, -20),                       to: v3(0, 9, -20),                           look: v3(0, FH+H*0.5, 0)        },
-    };
+  constructor(camera) {
+    this.#camera    = camera;
+    this.#pos       = camera.position.clone();
+    this.#tgt       = v3(0, 4, 0);
+    this.#targetPos = this.#pos.clone();
+    this.#targetTgt = this.#tgt.clone();
   }
 
-  update(stage, t) {
-    const wp = this.#wp[stage];
-    if (!wp) return;
-    const ease = CameraController.#easeInOut(Math.min(t, 1));
-    this.#camera.position.lerpVectors(wp.from, wp.to, ease);
-    this.#camera.lookAt(wp.look);
+  goTo(pos, look, smooth = 0.06) {
+    this.#targetPos.copy(pos);
+    this.#targetTgt.copy(look);
+    this.#smooth   = smooth;
+    this.#orbiting = false;
   }
 
-  orbit(dt) {
-    this.#orbitAngle += dt * 0.00028;
-    const R = 18, H = 11;
-    this.#camera.position.set(
-      R * Math.cos(this.#orbitAngle),
-      H + Math.sin(this.#orbitAngle * 0.4) * 1.5,
-      R * Math.sin(this.#orbitAngle)
-    );
-    const { FH, H: CH, RA } = CASA;
-    this.#camera.lookAt(0, FH + CH * 0.5 + RA * 0.3, 0);
+  startOrbit() {
+    this.#orbitAngle = Math.atan2(this.#pos.z, this.#pos.x);
+    this.#orbiting   = true;
   }
 
-  startOrbit(fromPos) {
-    this.#orbitAngle = Math.atan2(fromPos.z, fromPos.x);
-  }
-
-  static #easeInOut(t) {
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  update(dt) {
+    if (this.#orbiting) {
+      this.#orbitAngle += dt * 0.00022;
+      const R = 20, H = 12;
+      this.#targetPos.set(
+        R * Math.cos(this.#orbitAngle),
+        H + Math.sin(this.#orbitAngle * 0.35) * 1.2,
+        R * Math.sin(this.#orbitAngle)
+      );
+      const { FH, H: CH, RA } = CASA;
+      this.#targetTgt.set(0, FH + CH * 0.5 + RA * 0.2, 0);
+    }
+    this.#pos.lerp(this.#targetPos, this.#smooth);
+    this.#tgt.lerp(this.#targetTgt, this.#smooth);
+    this.#camera.position.copy(this.#pos);
+    this.#camera.lookAt(this.#tgt);
   }
 }
 
-/* helper Vector3 */
-function v3(x, y, z) { return new THREE.Vector3(x, y, z); }
-
 /* ─────────────────────────────────────────────────────────────────────
-   AnimationController — máquina de estados com delta time
+   AnimationController — 22 estágios cinematográficos
    ───────────────────────────────────────────────────────────────────── */
 class AnimationController {
   static #STAGES = [
-    { dur: 2000 },  //  0  drone-entrada
-    { dur: 1400 },  //  1  trilhos-1
-    { dur: 1000 },  //  2  cabos-1
-    { dur:  700 },  //  3  inversores-1
-    { dur: 2500 },  //  4  paineis-1
-    { dur: 1000 },  //  5  glow-1
-    { dur: 2000 },  //  6  pan-agua-2
-    { dur: 1400 },  //  7  trilhos-2
-    { dur: 1000 },  //  8  cabos-2
-    { dur:  700 },  //  9  inversores-2
-    { dur: 2500 },  // 10  paineis-2
-    { dur: 1500 },  // 11  cam-quadro
-    { dur:  900 },  // 12  quadro-abre
-    { dur:  900 },  // 13  luzes-on
-    { dur: 1800 },  // 14  orbita-curta
-    { dur: 1200 },  // 15  emissivo-fluxo
-    { dur: 1500 },  // 16  energy-orbs
-    { dur: 1800 },  // 17  cabo-parede
-    { dur: 1500 },  // 18  wide-shot
-    { dur: 2000 },  // 19  branding
-    { dur: Infinity }, // 20  estatico
+    { dur: 2200 }, { dur: 1500 }, { dur: 1200 }, { dur:  800 }, { dur: 2800 },
+    { dur: 1000 }, { dur: 1800 }, { dur: 1500 }, { dur: 1200 }, { dur:  800 },
+    { dur: 2800 }, { dur: 1000 }, { dur: 1800 }, { dur:  900 }, { dur:  900 },
+    { dur: 1800 }, { dur: 1200 }, { dur: 1500 }, { dur: 1800 }, { dur: 1600 },
+    { dur: 2200 }, { dur: Infinity },
   ];
 
   #models;
   #cam;
   #scene;
-  #energyFlow     = null;
-  #sound          = null;
+  #ef;
+  #sound;
   #stageCallbacks = new Map();
-  #stage   = 0;
-  #t       = 0;
-  #elapsed = 0;
-  #glow1   = null;
-  #glow2   = null;
+  #stage          = 0;
+  #t              = 0;
+  #elapsed        = 0;
+  #glow1          = null;
+  #glow2          = null;
+  #wp             = null;
 
-  constructor(scene, models, cam, energyFlow, sound) {
-    this.#scene      = scene;
-    this.#models     = models;
-    this.#cam        = cam;
-    this.#energyFlow = energyFlow ?? null;
-    this.#sound      = sound ?? null;
+  constructor(scene, models, cam, ef, sound) {
+    this.#scene  = scene;
+    this.#models = models;
+    this.#cam    = cam;
+    this.#ef     = ef   ?? null;
+    this.#sound  = sound ?? null;
     this.#criarGlows();
+    this.#configurarWaypoints();
   }
 
   onStageEnter(stage, fn) { this.#stageCallbacks.set(stage, fn); }
@@ -913,10 +832,43 @@ class AnimationController {
     this.#glow1 = new THREE.PointLight(0xFFDD55, 0, 8);
     this.#glow1.position.set(0, FH + H + RA * 0.55, -D / 4);
     this.#scene.add(this.#glow1);
-
     this.#glow2 = new THREE.PointLight(0xFFDD55, 0, 8);
-    this.#glow2.position.set(0, FH + H + RA * 0.55, D / 4);
+    this.#glow2.position.set(0, FH + H + RA * 0.55,  D / 4);
     this.#scene.add(this.#glow2);
+  }
+
+  #configurarWaypoints() {
+    const { W, D, FH, H, RA } = CASA;
+    const h     = this.#models.house;
+    const r1    = h.roof1Center.clone();
+    const r2    = h.roof2Center.clone();
+    const q     = h.quadroPos.clone();
+    const ridge = v3(0, FH + H + RA + 0.3, 0);
+    const wS    = W / 2 + 3.8;
+
+    this.#wp = {
+      0:  { pos: v3(0, 26, -22),                          look: v3(0, FH + H, 0),        smooth: 0.04 },
+      1:  { pos: v3(-4, 13, -15),                         look: r1,                       smooth: 0.07 },
+      2:  { pos: v3(-2, 11, -13),                         look: r1,                       smooth: 0.07 },
+      3:  { pos: v3(wS - 1, FH + H, -D * 0.4),            look: r1,                       smooth: 0.08 },
+      4:  { pos: v3(wS - 1, FH + H * 1.1, -D * 0.4),      look: r1,                       smooth: 0.07 },
+      5:  { pos: v3(wS - 1, FH + H * 1.1, -D * 0.4),      look: r1,                       smooth: 0.05 },
+      6:  { pos: v3(-2, 12, 0),                            look: ridge,                    smooth: 0.06 },
+      7:  { pos: v3(-4, 13, 15),                           look: r2,                       smooth: 0.07 },
+      8:  { pos: v3(-2, 11, 13),                           look: r2,                       smooth: 0.07 },
+      9:  { pos: v3(wS - 1, FH + H, D * 0.4),              look: r2,                       smooth: 0.08 },
+      10: { pos: v3(wS - 1, FH + H * 1.1, D * 0.4),        look: r2,                       smooth: 0.07 },
+      11: { pos: v3(wS - 1, FH + H * 1.1, D * 0.4),        look: r2,                       smooth: 0.05 },
+      12: { pos: v3(W / 2 + 3.5, FH + H * 0.6, q.z + 0.8), look: q,                        smooth: 0.07 },
+      13: { pos: v3(W / 2 + 2.2, FH + H * 0.5, q.z),        look: q,                        smooth: 0.09 },
+      14: { pos: v3(W / 2 + 2.2, FH + H * 0.5, q.z),        look: q,                        smooth: 0.05 },
+      15: { pos: v3(0, 26, -22),                           look: v3(0, FH + H * 0.6, 0),  smooth: 0.04 },
+      16: { pos: v3(-3, 14, -14),                          look: r1,                       smooth: 0.06 },
+      17: { pos: v3(-3, 14, -14),                          look: r1,                       smooth: 0.05 },
+      18: { pos: v3(W / 2 + 3.5, FH + H, q.z + 1),         look: q,                        smooth: 0.07 },
+      19: { pos: v3(0, 11, -22),                           look: v3(0, FH + H * 0.5, 0),  smooth: 0.05 },
+      20: { pos: v3(0, 11, -22),                           look: v3(0, FH + H * 0.5, 0),  smooth: 0.04 },
+    };
   }
 
   reset() { this.#stage = 0; this.#t = 0; this.#elapsed = 0; }
@@ -927,7 +879,12 @@ class AnimationController {
       this.#elapsed += dt;
       this.#t = Math.min(this.#elapsed / dur, 1);
     }
-    this.#dispatch(dt);
+
+    const wp = this.#wp?.[this.#stage];
+    if (wp) this.#cam.goTo(wp.pos, wp.look, wp.smooth);
+    this.#cam.update(dt);
+    this.#dispatch();
+
     if (isFinite(dur) && this.#elapsed >= dur) {
       const next = this.#stage + 1;
       this.#stage   = next;
@@ -937,155 +894,78 @@ class AnimationController {
     }
   }
 
-  #dispatch(dt) {
-    const s = this.#models;
-    const p = this.#t;
+  #dispatch() {
+    const s = this.#models, p = this.#t;
 
     switch (this.#stage) {
-      case 0:  this.#cam.update(0, p); break;
-      case 1:  this.#cam.update(1, p); s.solar1.animarTrilhos(p); break;
-      case 2:  this.#cam.update(2, p); s.solar1.animarCabos(p); break;
-      case 3:  this.#cam.update(3, p); s.solar1.animarInversores(p); break;
-      case 4:  this.#cam.update(4, p); s.solar1.animarPaineis(p); break;
-
+      case 0:  break;
+      case 1:  s.solar1.animarTrilhos(p); break;
+      case 2:  s.solar1.animarCabos(p); break;
+      case 3:  s.solar1.animarInversores(p); break;
+      case 4:  s.solar1.animarPaineis(p); break;
       case 5:
-        this.#cam.update(5, 1);
-        this.#glow1.intensity = (Math.sin(p * Math.PI * 3) * 0.5 + 0.5) * 2;
-        s.solar1.ativarEmissivo(Math.sin(p * Math.PI) * 0.6);
+        this.#glow1.intensity = (Math.sin(p * Math.PI * 3) * 0.5 + 0.5) * 2.2;
+        s.solar1.ativarEmissivo(Math.sin(p * Math.PI) * 0.65);
         break;
-
       case 6:
-        this.#cam.update(6, p);
-        this.#glow1.intensity = Math.max(0, 1.5 - p * 3);
+        this.#glow1.intensity = Math.max(0, 1.8 - p * 3.5);
         break;
-
-      case 7:  this.#cam.update(7, p); s.solar2.animarTrilhos(p); break;
-      case 8:  this.#cam.update(8, p); s.solar2.animarCabos(p); break;
-      case 9:  this.#cam.update(9, p); s.solar2.animarInversores(p); break;
-      case 10: this.#cam.update(10, p); s.solar2.animarPaineis(p); break;
-
+      case 7:  s.solar2.animarTrilhos(p); break;
+      case 8:  s.solar2.animarCabos(p); break;
+      case 9:  s.solar2.animarInversores(p); break;
+      case 10: s.solar2.animarPaineis(p); break;
       case 11:
-        this.#cam.update(11, p);
-        this.#glow2.intensity = (Math.sin(p * Math.PI * 2) * 0.4 + 0.4) * 2;
-        s.solar2.ativarEmissivo(Math.sin(p * Math.PI) * 0.6);
+        this.#glow2.intensity = (Math.sin(p * Math.PI * 3) * 0.5 + 0.5) * 2.2;
+        s.solar2.ativarEmissivo(Math.sin(p * Math.PI) * 0.65);
         break;
-
-      case 12: {
-        this.#cam.update(12, p);
+      case 12:
+        this.#glow2.intensity = Math.max(0, 1.8 - p * 3.5);
+        break;
+      case 13: {
         const quadro = this.#scene.getObjectByName('quadro');
         const disj   = this.#scene.getObjectByName('disjuntor');
-        if (quadro) { const sc = AnimationController.#easeOutBack(p);                    quadro.scale.set(sc, sc, sc); }
-        if (disj)   { const sc = AnimationController.#easeOutBack(Math.max(0, (p-0.5)*2)); disj.scale.set(sc, sc, sc); }
+        if (quadro) { const sc = easeOutBack(p); quadro.scale.set(sc, sc, sc); }
+        if (disj)   { const sc = easeOutBack(clamp01((p - 0.5) * 2)); disj.scale.set(sc, sc, sc); }
         break;
       }
-
-      case 13: {
-        this.#cam.update(13, 1);
+      case 14: {
         const disj = this.#scene.getObjectByName('disjuntor');
         if (disj) disj.rotation.z = -p * Math.PI * 0.35;
-        const i = AnimationController.#easeInOut(p) * 2;
+        const i = easeInOut(p) * 2.2;
         const h = s.house;
         if (h.luzJanela1) h.luzJanela1.intensity = i;
         if (h.luzJanela2) h.luzJanela2.intensity = i;
-        if (h.luzPoste)   h.luzPoste.intensity   = AnimationController.#easeInOut(p) * 2.5;
+        if (h.luzPoste)   h.luzPoste.intensity   = easeInOut(p) * 2.8;
         const led = this.#scene.getObjectByName('quadro-led');
-        if (led) led.material.emissiveIntensity = p * 1.5;
+        if (led) led.material.emissiveIntensity = p * 1.8;
         break;
       }
-
-      case 14:
-        this.#cam.orbit(dt);
-        break;
-
-      case 15:
-        this.#cam.update(15, p);
-        this.#models.solar1.ativarEmissivo(0.6 + Math.sin(p * Math.PI * 4) * 0.4);
-        this.#models.solar2.ativarEmissivo(0.6 + Math.sin(p * Math.PI * 4 + 0.5) * 0.4);
-        this.#glow1.intensity = 1.0 + Math.sin(p * Math.PI * 3) * 0.5;
-        this.#glow2.intensity = 1.0 + Math.sin(p * Math.PI * 3 + 0.8) * 0.5;
-        break;
-
+      case 15: break;
       case 16:
-        this.#cam.update(16, p);
-        this.#energyFlow?.tick(p);
-        this.#models.solar1.ativarEmissivo(0.7);
-        this.#models.solar2.ativarEmissivo(0.7);
+        s.solar1.ativarEmissivo(0.55 + Math.sin(p * Math.PI * 4) * 0.35);
+        s.solar2.ativarEmissivo(0.55 + Math.sin(p * Math.PI * 4 + 0.6) * 0.35);
+        this.#glow1.intensity = 0.8 + Math.sin(p * Math.PI * 3) * 0.4;
+        this.#glow2.intensity = 0.8 + Math.sin(p * Math.PI * 3 + 0.8) * 0.4;
         break;
-
       case 17:
-        this.#cam.update(17, p);
-        this.#models.house.animarCaboParede(p);
-        this.#energyFlow?.reset();
+        this.#ef?.tick(p);
+        s.solar1.ativarEmissivo(0.7); s.solar2.ativarEmissivo(0.7);
         break;
-
       case 18:
-        this.#cam.update(18, p);
-        this.#glow1.intensity = Math.max(0, 1.5 - p * 1.8);
-        this.#glow2.intensity = Math.max(0, 1.5 - p * 1.8);
+        s.house.animarCaboParede(p);
+        this.#ef?.reset();
+        this.#glow1.intensity = Math.max(0, 1.5 - p * 2);
+        this.#glow2.intensity = Math.max(0, 1.5 - p * 2);
         break;
-
-      case 19:
-        this.#cam.update(19, p);
-        break;
-
-      case 20:
-        /* cena estática — loop para via callback */
-        break;
+      case 19: break;
+      case 20: break;
+      case 21: break;
     }
-  }
-
-  static #easeOutBack(t) {
-    if (t <= 0) return 0;
-    if (t >= 1) return 1;
-    const c1 = 1.70158, c3 = c1 + 1;
-    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-  }
-
-  static #easeInOut(t) {
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   }
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   SoundController — efeitos sonoros via Web Audio API
-   ───────────────────────────────────────────────────────────────────── */
-class SoundController {
-  #ctx = null;
-
-  #getCtx() {
-    if (!this.#ctx) {
-      this.#ctx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if (this.#ctx.state === 'suspended') this.#ctx.resume();
-    return this.#ctx;
-  }
-
-  #beep(freq, endFreq, gain, duration) {
-    try {
-      const ctx = this.#getCtx();
-      const osc = ctx.createOscillator();
-      const vol = ctx.createGain();
-      osc.type  = 'sine';
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(endFreq, ctx.currentTime + duration);
-      vol.gain.setValueAtTime(gain, ctx.currentTime);
-      vol.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-      osc.connect(vol);
-      vol.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + duration);
-    } catch (_) { /* bloqueado pelo browser — silencioso */ }
-  }
-
-  tocarEncaixe()  { this.#beep(820, 440, 0.12, 0.18); }
-  tocarEletrico() { this.#beep(120,  80, 0.08, 0.35); }
-  tocarLuz()      { this.#beep(1200, 600, 0.06, 0.22); }
-
-  dispose() { this.#ctx?.close(); this.#ctx = null; }
-}
-
-/* ─────────────────────────────────────────────────────────────────────
-   SceneManager — renderer, scene, câmera, luzes globais, resize
+   SceneManager — renderer, scene, câmera, iluminação e resize
    ───────────────────────────────────────────────────────────────────── */
 class SceneManager {
   #canvas;
@@ -1105,17 +985,17 @@ class SceneManager {
     this.renderer = new THREE.WebGLRenderer({ canvas: this.#canvas, antialias: true, alpha: false });
     this.renderer.setSize(W, H);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled   = true;
-    this.renderer.shadowMap.type      = THREE.PCFSoftShadowMap;
-    this.renderer.toneMapping         = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.shadowMap.enabled  = true;
+    this.renderer.shadowMap.type     = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping        = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 0.95;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x87CEEB);
-    this.scene.fog        = new THREE.FogExp2(0xaad4f0, 0.018);
+    this.scene.fog        = new THREE.FogExp2(0xaad4f0, 0.016);
 
-    this.camera = new THREE.PerspectiveCamera(52, W / H, 0.1, 300);
-    this.camera.position.set(0, 22, 2);
+    this.camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 300);
+    this.camera.position.set(0, 26, -22);
 
     this.#setupLights();
 
@@ -1124,23 +1004,23 @@ class SceneManager {
   }
 
   #setupLights() {
-    this.scene.add(new THREE.AmbientLight(0xffeedd, 0.45));
+    this.scene.add(new THREE.AmbientLight(0xffeedd, 0.5));
 
-    const sun = new THREE.DirectionalLight(0xFFF5E0, 2.2);
-    sun.position.set(14, 28, -10);
+    const sun = new THREE.DirectionalLight(0xFFF5E0, 2.4);
+    sun.position.set(14, 30, -12);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left   = -20;
-    sun.shadow.camera.right  =  20;
-    sun.shadow.camera.top    =  20;
-    sun.shadow.camera.bottom = -20;
-    sun.shadow.bias          = -0.001;
-    sun.shadow.normalBias    =  0.02;
+    sun.shadow.camera.left   = -22;
+    sun.shadow.camera.right  =  22;
+    sun.shadow.camera.top    =  22;
+    sun.shadow.camera.bottom = -22;
+    sun.shadow.bias          = -0.0008;
+    sun.shadow.normalBias    =  0.018;
     this.scene.add(sun);
 
-    this.scene.add(new THREE.HemisphereLight(0x87CEEB, 0x3a6b28, 0.55));
+    this.scene.add(new THREE.HemisphereLight(0x87CEEB, 0x3a6b28, 0.5));
 
-    const fill = new THREE.DirectionalLight(0xcce8ff, 0.4);
+    const fill = new THREE.DirectionalLight(0xcce8ff, 0.38);
     fill.position.set(-10, 8, 15);
     this.scene.add(fill);
   }
@@ -1157,7 +1037,8 @@ class SceneManager {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   AnimacaoMontagem — fachada pública (API inalterada)
+   AnimacaoMontagem — fachada pública
+   API: constructor(canvas) · iniciar() · reiniciar() · parar()
    ───────────────────────────────────────────────────────────────────── */
 class AnimacaoMontagem {
   #sm         = null;
@@ -1179,7 +1060,6 @@ class AnimacaoMontagem {
     this.#ml = new ModelLoader(this.#sm.scene);
     this.#ml.load();
     this.#cc = new CameraController(this.#sm.camera);
-    this.#cc.configure(this.#ml.house);
     this.#ef = new EnergyFlow(this.#sm.scene);
     this.#ef.addCurves(this.#ml.solar1.getCurves());
     this.#ef.addCurves(this.#ml.solar2.getCurves());
@@ -1193,10 +1073,10 @@ class AnimacaoMontagem {
   #bindCallbacks(canvasEl) {
     this.#ac.onStageEnter(4,  () => this.#sound.tocarEncaixe());
     this.#ac.onStageEnter(10, () => this.#sound.tocarEncaixe());
-    this.#ac.onStageEnter(14, () => this.#cc.startOrbit(this.#sm.camera.position));
-    this.#ac.onStageEnter(17, () => this.#sound.tocarEletrico());
-    this.#ac.onStageEnter(19, () => this.#mostrarBranding(canvasEl));
-    this.#ac.onStageEnter(20, () => { this.#sm.render(); this.parar(); });
+    this.#ac.onStageEnter(15, () => this.#cc.startOrbit());
+    this.#ac.onStageEnter(18, () => this.#sound.tocarEletrico());
+    this.#ac.onStageEnter(20, () => this.#mostrarBranding(canvasEl));
+    this.#ac.onStageEnter(21, () => { this.#sm.render(); this.parar(); });
   }
 
   #mostrarBranding(canvasEl) {
@@ -1213,7 +1093,7 @@ class AnimacaoMontagem {
     });
     container.appendChild(el);
     this.#brandingEl = el;
-    void el.offsetWidth; /* força reflow para CSS transition funcionar */
+    void el.offsetWidth;
     el.classList.add('anim-branding--visivel');
     this.#sound.tocarLuz();
   }
@@ -1229,7 +1109,7 @@ class AnimacaoMontagem {
     this.#ef?.reset();
     this.#ac.reset();
     this.#tsUlt = performance.now();
-    this.#raf = requestAnimationFrame(ts => this.#loop(ts));
+    this.#raf   = requestAnimationFrame(ts => this.#loop(ts));
   }
 
   reiniciar() { this.iniciar(); }
