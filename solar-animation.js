@@ -367,22 +367,22 @@ class Walls {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   Roof — duas águas com ângulo matematicamente correto
-   roofY(z): altura exata da superfície do telhado em z
+   Roof — duas águas com cumeeira ao longo de Z
+   roofY(x): altura exata da superfície do telhado na posição X
    roofPoint(x,z,offset): ponto 3D na superfície + offset normal
    ───────────────────────────────────────────────────────────────────── */
 class Roof {
-  static roofY(zWorld) {
-    const { FH, H, RA, D } = CASA;
-    return FH + H + RA * (1 - Math.abs(zWorld) / (D / 2));
+  static roofY(xWorld) {
+    const { FH, H, RA, W } = CASA;
+    return FH + H + RA * (1 - Math.abs(xWorld) / (W / 2));
   }
 
   static roofPoint(x, z, normalOffset = 0) {
-    const { RA, D } = CASA;
-    const slope = Math.atan2(RA, D / 2);
+    const { RA, W } = CASA;
+    const slope = Math.atan2(RA, W / 2);
     const ny = Math.cos(slope);
-    const nz = -Math.sign(z || -0.001) * Math.sin(slope);
-    return v3(x, Roof.roofY(z) + normalOffset * ny, z + normalOffset * nz);
+    const nx = -Math.sign(x || -0.001) * Math.sin(slope);
+    return v3(x + normalOffset * nx, Roof.roofY(x) + normalOffset * ny, z);
   }
 
   constructor(grp) {
@@ -391,8 +391,8 @@ class Roof {
     /* Pontos-chave do telhado */
     const eY  = FH + H;          // nível do beiral (topo da parede)
     const rY  = FH + H + RA;     // nível da cumeeira
-    const xL  = -(W / 2 + EV);  // extremo esquerdo (com beiral lateral)
-    const xR  =  (W / 2 + EV);  // extremo direito
+    const eXl = -(W / 2 + EV);  // extremo esquerdo (com beiral lateral)
+    const eXr =  (W / 2 + EV);  // extremo direito
     const eZf = -(D / 2 + EV);  // Z do beiral dianteiro
     const eZb =  (D / 2 + EV);  // Z do beiral traseiro
 
@@ -409,7 +409,6 @@ class Roof {
         ]), 3
       ));
       geo.setIndex([0, 1, 2,  0, 2, 3]);
-      /* UV: U = largura (0→1), V = altura do slope (0→1) */
       geo.setAttribute('uv', new THREE.BufferAttribute(
         new Float32Array([0, 0,  0, 1,  1, 1,  1, 0]), 2
       ));
@@ -417,64 +416,66 @@ class Roof {
       return geo;
     };
 
-    /* ── Água DIANTEIRA (frente, Z < 0)
-       Winding CCW do exterior: bl → tl → tr → br
-       → normal aponta para cima e para frente (−Z) ── */
-    const front = new THREE.Mesh(
+    /* ── Água ESQUERDA (X < 0)
+       Cumeeira em x=0; beiral em x=eXl
+       Winding CCW visto de fora (−X): bl-frente → bl-trás → topo-trás → topo-frente
+       → normal aponta para cima e para a esquerda (−X) ── */
+    const left = new THREE.Mesh(
       buildPane(
-        v3(xL, eY, eZf),  // p0 bl — beiral esq. dianteiro
-        v3(xL, rY, 0),    // p1 tl — cumeeira esq.
-        v3(xR, rY, 0),    // p2 tr — cumeeira dir.
-        v3(xR, eY, eZf),  // p3 br — beiral dir. dianteiro
+        v3(eXl, eY, eZf),  // p0 frente-baixo esq.
+        v3(eXl, eY, eZb),  // p1 trás-baixo esq.
+        v3(0,   rY, eZb),  // p2 trás-topo (cumeeira)
+        v3(0,   rY, eZf),  // p3 frente-topo (cumeeira)
       ),
       MaterialLibrary.telha()
     );
-    front.castShadow = front.receiveShadow = true;
-    grp.add(front);
+    left.castShadow = left.receiveShadow = true;
+    grp.add(left);
 
-    /* ── Água TRASEIRA (trás, Z > 0)
-       Winding CCW do exterior: br → tr → tl → bl
-       → normal aponta para cima e para trás (+Z) ── */
-    const back = new THREE.Mesh(
+    /* ── Água DIREITA (X > 0)
+       Cumeeira em x=0; beiral em x=eXr
+       Winding CCW visto de fora (+X): frente-baixo → topo-frente → topo-trás → trás-baixo
+       → normal aponta para cima e para a direita (+X) ── */
+    const right = new THREE.Mesh(
       buildPane(
-        v3(xR, eY, eZb),  // p0 br — beiral dir. traseiro
-        v3(xR, rY, 0),    // p1 tr — cumeeira dir.
-        v3(xL, rY, 0),    // p2 tl — cumeeira esq.
-        v3(xL, eY, eZb),  // p3 bl — beiral esq. traseiro
+        v3(eXr, eY, eZf),  // p0 frente-baixo dir.
+        v3(0,   rY, eZf),  // p1 frente-topo (cumeeira)
+        v3(0,   rY, eZb),  // p2 trás-topo (cumeeira)
+        v3(eXr, eY, eZb),  // p3 trás-baixo dir.
       ),
       MaterialLibrary.telha()
     );
-    back.castShadow = back.receiveShadow = true;
-    grp.add(back);
+    right.castShadow = right.receiveShadow = true;
+    grp.add(right);
 
-    /* ── Cumeeira cilíndrica ── */
+    /* ── Cumeeira cilíndrica (ao longo de Z) ── */
     const ridge = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.065, 0.065, W + EV * 2 + 0.1, 8),
+      new THREE.CylinderGeometry(0.065, 0.065, D + EV * 2 + 0.1, 8),
       MaterialLibrary.metalEscuro()
     );
-    ridge.rotation.z = Math.PI / 2;
+    ridge.rotation.x = Math.PI / 2;
     ridge.position.set(0, rY + 0.05, 0);
     ridge.castShadow = true;
     grp.add(ridge);
 
-    /* ── Tabeiras laterais (cobrem a empena) ── */
+    /* ── Tabeiras laterais (cobrem o beiral esq./dir.) ── */
     for (const side of [-1, 1]) {
       const tabeira = new THREE.Mesh(
         new THREE.BoxGeometry(0.18, 0.18, D + EV * 2 + 0.1),
         MaterialLibrary.madeira()
       );
-      tabeira.position.set(side * (W / 2 + EV * 0.5), FH + H + RA * 0.06, 0);
+      tabeira.position.set(side * (W / 2 + EV * 0.5), eY + 0.05, 0);
       tabeira.castShadow = true;
       grp.add(tabeira);
     }
 
-    /* ── Beirais dianteiro e traseiro ── */
+    /* ── Beirais dianteiro e traseiro (ao longo de X, nas empenas) ── */
     for (const sign of [-1, 1]) {
       const beiral = new THREE.Mesh(
         new THREE.BoxGeometry(W + EV * 2 + 0.1, 0.12, 0.2),
         MaterialLibrary.madeira()
       );
-      beiral.position.set(0, FH + H + 0.04, sign * (D / 2 + EV * 0.88));
+      beiral.position.set(0, eY + 0.04, sign * (D / 2 + EV * 0.88));
       grp.add(beiral);
     }
   }
@@ -609,7 +610,7 @@ class Chimney {
   constructor(grp) {
     const { W, D } = CASA;
     const cx = W / 4, cz = D * 0.18;
-    const yBase = Roof.roofY(cz) - 0.08;
+    const yBase = Roof.roofY(cx) - 0.08;  // roofY agora depende de X
 
     // Corpo
     const corpo = new THREE.Mesh(
@@ -803,8 +804,8 @@ class HouseBuilder {
     new Garden(this.#grp);
     const pole = new Pole(this.#grp);
 
-    this.roof1Center.set(0, FH + H + RA * 0.5, -D / 4);
-    this.roof2Center.set(0, FH + H + RA * 0.5,  D / 4);
+    this.roof1Center.set(-W / 4, FH + H + RA * 0.5, 0);
+    this.roof2Center.set( W / 4, FH + H + RA * 0.5, 0);
     this.poleTop.copy(pole.poleTop);
   }
 }
