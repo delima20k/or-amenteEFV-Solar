@@ -65,112 +65,256 @@ class SoundFX {
 }
 
 /* ============================================================
-   ROOF SCENE — fundo estático (casa + telhado)
+   ROOF SCENE — fundo detalhado e realista
    ============================================================ */
 class RoofScene {
   #ctx; #w; #h;
-  /** Quad [TL, TR, BR, BL] da face do telhado onde os painéis serão montados */
   #quad;
+  static #STARS = null;
+  static #GRASS = null;
 
   constructor(ctx, w, h) {
     this.#ctx  = ctx;
     this.#w    = w;
     this.#h    = h;
     this.#quad = this.#buildQuad();
+    RoofScene.#ensureStatics();
+  }
+
+  static #ensureStatics() {
+    if (RoofScene.#STARS) return;
+    RoofScene.#STARS = Array.from({ length: 32 }, () => ({
+      u: Math.random(), v: Math.random() * 0.70,
+      r: 0.5 + Math.random() * 1.3,
+      a: 0.35 + Math.random() * 0.60,
+    }));
+    RoofScene.#GRASS = Array.from({ length: 70 }, (_, i) => ({
+      u:  (i / 70) + Math.sin(i * 6.1) * 0.006,
+      dv: Math.random() * 0.014,
+      gh: 0.008 + Math.random() * 0.013,
+      dx: (Math.random() - 0.5) * 3.5,
+      a:  0.22 + Math.random() * 0.30,
+    }));
   }
 
   #buildQuad() {
     const w = this.#w, h = this.#h;
     return [
-      { x: w * 0.28, y: h * 0.16 },   // TL — cumeeira esquerda
-      { x: w * 0.89, y: h * 0.27 },   // TR — cumeeira direita
-      { x: w * 0.89, y: h * 0.56 },   // BR — calha direita
-      { x: w * 0.28, y: h * 0.45 },   // BL — calha esquerda
+      { x: w * 0.28, y: h * 0.16 },
+      { x: w * 0.89, y: h * 0.27 },
+      { x: w * 0.89, y: h * 0.56 },
+      { x: w * 0.28, y: h * 0.45 },
     ];
   }
 
-  get quad()       { return this.#quad; }
-  point(u, v)      { return GeometryUtils.quadPt(this.#quad, u, v); }
+  get quad()  { return this.#quad; }
+  point(u, v) { return GeometryUtils.quadPt(this.#quad, u, v); }
 
   draw() {
     const ctx = this.#ctx, w = this.#w, h = this.#h;
+    this.#drawSky(ctx, w, h);
+    this.#drawGround(ctx, w, h);
+    this.#drawHouseShell(ctx, w, h);
+    this.#drawRoofFaces(ctx, w, h);
+    this.#drawDetails(ctx, w, h);
+  }
 
-    /* --- Céu --- */
+  /* ---- CÉU ---- */
+  #drawSky(ctx, w, h) {
     const sky = ctx.createLinearGradient(0, 0, 0, h * 0.78);
-    sky.addColorStop(0, '#04091a');
-    sky.addColorStop(1, '#0d2240');
+    sky.addColorStop(0,    '#020610');
+    sky.addColorStop(0.28, '#040c1c');
+    sky.addColorStop(0.65, '#08182e');
+    sky.addColorStop(1,    '#0d2242');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, h);
 
+    /* Brilho atmosférico no horizonte */
+    const horiz = ctx.createLinearGradient(0, h * 0.58, 0, h * 0.80);
+    horiz.addColorStop(0,   'transparent');
+    horiz.addColorStop(0.6, 'rgba(255,100,25,0.055)');
+    horiz.addColorStop(1,   'rgba(255,60,10,0.12)');
+    ctx.fillStyle = horiz;
+    ctx.fillRect(0, h * 0.58, w, h * 0.22);
+
     /* Estrelas */
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    for (const [su, sv] of [
-      [0.06,0.04],[0.21,0.07],[0.40,0.02],[0.57,0.09],[0.74,0.04],
-      [0.87,0.07],[0.14,0.12],[0.65,0.11],[0.93,0.13],[0.32,0.05],
-    ]) {
+    for (const s of RoofScene.#STARS) {
+      ctx.save();
+      if (s.r > 1.1) { ctx.shadowBlur = 6; ctx.shadowColor = 'rgba(180,205,255,0.55)'; }
+      ctx.fillStyle = `rgba(210,225,255,${s.a})`;
       ctx.beginPath();
-      ctx.arc(su * w, sv * h, 0.9, 0, Math.PI * 2);
+      ctx.arc(s.u * w, s.v * h, s.r, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
     }
 
-    /* Lua */
+    this.#drawMoon(ctx, w, h);
+  }
+
+  #drawMoon(ctx, w, h) {
+    const mx = w * 0.87, my = h * 0.072, mr = h * 0.034;
+    /* Disco principal */
     ctx.save();
+    ctx.shadowBlur  = 24;
+    ctx.shadowColor = 'rgba(255,238,170,0.48)';
+    ctx.fillStyle   = 'rgba(255,244,196,0.58)';
     ctx.beginPath();
-    ctx.arc(w * 0.10, h * 0.08, h * 0.025, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,240,180,0.55)';
-    ctx.shadowBlur = 12;
-    ctx.shadowColor = 'rgba(255,240,150,0.4)';
+    ctx.arc(mx, my, mr, 0, Math.PI * 2);
+    ctx.fill();
+    /* Recorte para crescente */
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = 'rgba(0,0,0,0.64)';
+    ctx.beginPath();
+    ctx.arc(mx + mr * 0.56, my - mr * 0.12, mr * 0.78, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+    /* Halo externo */
+    const halo = ctx.createRadialGradient(mx, my, mr * 0.9, mx, my, mr * 3.4);
+    halo.addColorStop(0, 'rgba(255,235,155,0.15)');
+    halo.addColorStop(1, 'transparent');
+    ctx.save();
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(mx, my, mr * 3.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
-    /* --- Solo --- */
-    const ground = ctx.createLinearGradient(0, h * 0.78, 0, h);
-    ground.addColorStop(0, '#0a160a');
-    ground.addColorStop(1, '#050b05');
-    ctx.fillStyle = ground;
-    ctx.fillRect(0, h * 0.78, w, h * 0.22);
+  /* ---- SOLO ---- */
+  #drawGround(ctx, w, h) {
+    const gnd = ctx.createLinearGradient(0, h * 0.77, 0, h);
+    gnd.addColorStop(0,   '#0e2010');
+    gnd.addColorStop(0.5, '#081408');
+    gnd.addColorStop(1,   '#030804');
+    ctx.fillStyle = gnd;
+    ctx.fillRect(0, h * 0.77, w, h * 0.23);
 
-    /* --- Parede lateral esquerda (profundidade 3D) --- */
-    ctx.fillStyle = '#0e1c2c';
+    /* Grama */
+    ctx.save();
+    for (const g of RoofScene.#GRASS) {
+      const gx = Math.min(1, Math.max(0, g.u)) * w;
+      const gy = h * (0.770 + g.dv);
+      ctx.strokeStyle = `rgba(20,52,14,${g.a})`;
+      ctx.lineWidth   = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(gx, gy);
+      ctx.lineTo(gx + g.dx, gy - h * g.gh);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    /* Caminho até a porta */
+    ctx.save();
+    ctx.fillStyle = 'rgba(22,36,52,0.70)';
+    ctx.beginPath();
+    ctx.moveTo(w * 0.74, h * 0.778);
+    ctx.lineTo(w * 0.80, h * 0.778);
+    ctx.lineTo(w * 0.90, h);
+    ctx.lineTo(w * 0.62, h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(40,70,110,0.22)';
+    ctx.lineWidth   = 0.6;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /* ---- PAREDES ---- */
+  #drawHouseShell(ctx, w, h) {
+    /* Parede lateral esquerda */
+    const sideGrd = ctx.createLinearGradient(w * 0.05, 0, w * 0.28, 0);
+    sideGrd.addColorStop(0, '#040b14');
+    sideGrd.addColorStop(1, '#0b1726');
+    ctx.fillStyle = sideGrd;
     ctx.beginPath();
     ctx.moveTo(w * 0.05, h * 0.78);
     ctx.lineTo(w * 0.05, h * 0.49);
-    ctx.lineTo(w * 0.28, h * 0.45);   // BL do quad
+    ctx.lineTo(w * 0.28, h * 0.45);
     ctx.lineTo(w * 0.28, h * 0.78);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = '#1a3050';
-    ctx.lineWidth = 0.5;
+    ctx.strokeStyle = 'rgba(70,120,200,0.12)';
+    ctx.lineWidth   = 0.5;
     ctx.stroke();
 
-    /* --- Parede frontal --- */
-    const wallGrad = ctx.createLinearGradient(w * 0.28, h * 0.45, w * 0.28, h * 0.78);
-    wallGrad.addColorStop(0, '#172030');
-    wallGrad.addColorStop(1, '#111828');
-    ctx.fillStyle = wallGrad;
+    /* Parede frontal */
+    const wallGrd = ctx.createLinearGradient(w * 0.28, h * 0.45, w * 0.28, h * 0.78);
+    wallGrd.addColorStop(0,   '#1e3254');
+    wallGrd.addColorStop(0.4, '#162444');
+    wallGrd.addColorStop(1,   '#0e1a30');
+    ctx.fillStyle = wallGrd;
     ctx.fillRect(w * 0.28, h * 0.45, w * 0.61, h * 0.33);
-    ctx.strokeStyle = '#1e3050';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(w * 0.28, h * 0.45, w * 0.61, h * 0.33);
 
-    /* --- Face esquerda do telhado (triângulo de profundidade) --- */
-    ctx.fillStyle = '#0a1620';
+    /* Textura de tijolos (linhas horizontais) */
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0,0,0,0.14)';
+    ctx.lineWidth   = 0.35;
+    for (let r = 1; r < 8; r++) {
+      const ly = h * (0.45 + r * 0.33 / 8);
+      ctx.beginPath();
+      ctx.moveTo(w * 0.28, ly);
+      ctx.lineTo(w * 0.89, ly);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    /* Aresta vertical de canto (esquerda) */
+    ctx.save();
+    ctx.strokeStyle = 'rgba(70,125,200,0.22)';
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.moveTo(w * 0.28, h * 0.45);
+    ctx.lineTo(w * 0.28, h * 0.78);
+    ctx.stroke();
+    ctx.restore();
+
+    /* Cornija (moldura entre parede e telhado) */
+    ctx.fillStyle = '#253d58';
+    ctx.fillRect(w * 0.28, h * 0.442, w * 0.61, h * 0.014);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(100,160,235,0.20)';
+    ctx.lineWidth   = 0.4;
+    ctx.strokeRect(w * 0.28, h * 0.442, w * 0.61, h * 0.014);
+    ctx.restore();
+
+    /* Rodapé / fundação */
+    ctx.fillStyle = '#0c1620';
+    ctx.fillRect(w * 0.28, h * 0.757, w * 0.61, h * 0.023);
+    ctx.fillStyle = '#0a1218';
+    ctx.fillRect(w * 0.05, h * 0.760, w * 0.24, h * 0.018);
+
+    /* Borda geral da parede */
+    ctx.save();
+    ctx.strokeStyle = 'rgba(25,55,100,0.38)';
+    ctx.lineWidth   = 0.6;
+    ctx.strokeRect(w * 0.28, h * 0.45, w * 0.61, h * 0.33);
+    ctx.restore();
+  }
+
+  /* ---- TELHADO ---- */
+  #drawRoofFaces(ctx, w, h) {
+    const [tl, tr, br, bl] = this.#quad;
+
+    /* Face esquerda triangular (sombra profunda) */
+    ctx.fillStyle = '#060c14';
     ctx.beginPath();
     ctx.moveTo(w * 0.05, h * 0.49);
-    ctx.lineTo(w * 0.28, h * 0.16);   // TL quad
-    ctx.lineTo(w * 0.28, h * 0.45);   // BL quad
+    ctx.lineTo(tl.x, tl.y);
+    ctx.lineTo(bl.x, bl.y);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = '#152232';
-    ctx.lineWidth = 0.5;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(45,85,150,0.28)';
+    ctx.lineWidth   = 0.8;
     ctx.stroke();
+    ctx.restore();
 
-    /* --- Face do telhado (onde os painéis serão montados) --- */
-    const [tl, tr, br, bl] = this.#quad;
-    const roofGrad = ctx.createLinearGradient(tl.x, tl.y, br.x, br.y);
-    roofGrad.addColorStop(0, '#183050');
-    roofGrad.addColorStop(1, '#0c1e38');
-    ctx.fillStyle = roofGrad;
+    /* Face principal do telhado (base; painéis cobrirão) */
+    const roofGrd = ctx.createLinearGradient(tl.x, tl.y, br.x, br.y);
+    roofGrd.addColorStop(0,   '#1d3758');
+    roofGrd.addColorStop(0.5, '#122844');
+    roofGrd.addColorStop(1,   '#0a1c30');
+    ctx.fillStyle = roofGrd;
     ctx.beginPath();
     ctx.moveTo(tl.x, tl.y);
     ctx.lineTo(tr.x, tr.y);
@@ -178,14 +322,40 @@ class RoofScene {
     ctx.lineTo(bl.x, bl.y);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = '#223848';
-    ctx.lineWidth = 1;
-    ctx.stroke();
 
-    /* --- Cumeeira --- */
+    /* Linhas de telhas (horizontal) */
     ctx.save();
-    ctx.strokeStyle = '#2a4870';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(5,14,32,0.52)';
+    ctx.lineWidth   = 0.7;
+    for (let i = 1; i < 10; i++) {
+      const vf = i / 10;
+      const p0 = GeometryUtils.quadPt(this.#quad, 0, vf);
+      const p1 = GeometryUtils.quadPt(this.#quad, 1, vf);
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+    }
+    /* Linhas verticais sutis de telha */
+    ctx.strokeStyle = 'rgba(5,14,32,0.22)';
+    for (let i = 1; i < 5; i++) {
+      const uf = i / 5;
+      const p0 = GeometryUtils.quadPt(this.#quad, uf, 0);
+      const p1 = GeometryUtils.quadPt(this.#quad, uf, 1);
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    /* Cumeeira com brilho */
+    ctx.save();
+    ctx.shadowBlur  = 10;
+    ctx.shadowColor = 'rgba(80,145,230,0.45)';
+    ctx.strokeStyle = '#3e6c9a';
+    ctx.lineWidth   = 4;
+    ctx.lineCap     = 'round';
     ctx.beginPath();
     ctx.moveTo(w * 0.05, h * 0.49);
     ctx.lineTo(tl.x, tl.y);
@@ -193,36 +363,225 @@ class RoofScene {
     ctx.stroke();
     ctx.restore();
 
-    /* --- Janelas --- */
-    this.#drawWindow(w * 0.37, h * 0.52, w * 0.10, h * 0.09);
-    this.#drawWindow(w * 0.60, h * 0.52, w * 0.10, h * 0.09);
-
-    /* --- Porta --- */
-    ctx.fillStyle = '#0a1420';
-    ctx.fillRect(w * 0.74, h * 0.60, w * 0.07, h * 0.18);
-    ctx.strokeStyle = '#1a2e48';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(w * 0.74, h * 0.60, w * 0.07, h * 0.18);
-    /* maçaneta */
-    ctx.fillStyle = '#3a6090';
+    /* Calha inferior */
+    ctx.save();
+    ctx.strokeStyle = '#2c5080';
+    ctx.lineWidth   = 2.2;
+    ctx.lineCap     = 'round';
     ctx.beginPath();
-    ctx.arc(w * 0.776, h * 0.69, h * 0.008, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(bl.x - 2, bl.y);
+    ctx.lineTo(br.x + 2, br.y);
+    ctx.stroke();
+    ctx.restore();
   }
 
-  #drawWindow(x, y, ww, wh) {
-    const ctx = this.#ctx;
-    /* Luz quente dentro */
-    ctx.fillStyle = 'rgba(255,210,80,0.10)';
-    ctx.fillRect(x, y, ww, wh);
-    ctx.strokeStyle = '#1e3050';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, ww, wh);
-    /* Divisórias */
+  /* ---- DETALHES ---- */
+  #drawDetails(ctx, w, h) {
+    this.#drawChimney(ctx, w, h);
+    this.#drawWindowDetailed(ctx, w * 0.37, h * 0.52, w * 0.10, h * 0.09);
+    this.#drawWindowDetailed(ctx, w * 0.60, h * 0.52, w * 0.10, h * 0.09);
+    this.#drawDoor(ctx, w, h);
+    this.#drawLamp(ctx, w, h);
+    this.#drawShrubs(ctx, w, h);
+  }
+
+  #drawChimney(ctx, w, h) {
+    const cx  = w * 0.80, cw = w * 0.046;
+    const capY = h * 0.084;
+    const uCh  = (0.80 - 0.28) / 0.61;
+    const roofPt = GeometryUtils.quadPt(this.#quad, uCh, 0.05);
+    const baseY  = roofPt.y + h * 0.016;
+
+    /* Corpo */
+    const chGrd = ctx.createLinearGradient(cx - cw / 2, 0, cx + cw / 2, 0);
+    chGrd.addColorStop(0, '#14202e');
+    chGrd.addColorStop(1, '#0c1820');
+    ctx.fillStyle = chGrd;
+    ctx.fillRect(cx - cw / 2, capY + 7, cw, baseY - capY - 7);
+
+    /* Linhas de argamassa */
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+    ctx.lineWidth   = 0.4;
+    const rows = 5;
+    for (let i = 1; i < rows; i++) {
+      const ly = capY + 7 + (baseY - capY - 7) * i / rows;
+      ctx.beginPath();
+      ctx.moveTo(cx - cw / 2, ly);
+      ctx.lineTo(cx + cw / 2, ly);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    /* Capelo */
+    ctx.fillStyle = '#283e58';
+    ctx.fillRect(cx - cw / 2 - 3, capY, cw + 6, 9);
+    ctx.strokeStyle = 'rgba(60,100,165,0.30)';
+    ctx.lineWidth   = 0.5;
+    ctx.strokeRect(cx - cw / 2, capY + 7, cw, baseY - capY - 7);
+
+    /* Fumaça sutil */
+    ctx.save();
+    ctx.globalAlpha = 0.10;
+    ctx.strokeStyle = '#90b0c8';
+    ctx.lineWidth   = 2;
+    ctx.lineCap     = 'round';
     ctx.beginPath();
-    ctx.moveTo(x + ww / 2, y);    ctx.lineTo(x + ww / 2, y + wh);
-    ctx.moveTo(x, y + wh / 2);    ctx.lineTo(x + ww, y + wh / 2);
+    ctx.moveTo(cx, capY);
+    ctx.bezierCurveTo(cx + 7, capY - h * 0.028, cx - 5, capY - h * 0.055, cx + 5, capY - h * 0.085);
     ctx.stroke();
+    ctx.restore();
+  }
+
+  #drawWindowDetailed(ctx, x, y, ww, wh) {
+    /* Moldura externa */
+    ctx.fillStyle = '#1e3254';
+    ctx.fillRect(x - 4, y - 4, ww + 8, wh + 8);
+
+    /* Vidro com brilho quente */
+    const glGrd = ctx.createRadialGradient(
+      x + ww * 0.5, y + wh * 0.42, 0,
+      x + ww * 0.5, y + wh * 0.42, Math.max(ww, wh) * 0.78
+    );
+    glGrd.addColorStop(0,    'rgba(255,218,74,0.28)');
+    glGrd.addColorStop(0.55, 'rgba(255,168,38,0.12)');
+    glGrd.addColorStop(1,    'rgba(230,90,8,0.03)');
+    ctx.fillStyle = glGrd;
+    ctx.fillRect(x, y, ww, wh);
+
+    /* Halo na parede */
+    ctx.save();
+    ctx.shadowBlur  = 18;
+    ctx.shadowColor = 'rgba(255,188,54,0.22)';
+    ctx.fillStyle   = 'rgba(0,0,0,0)';
+    ctx.fillRect(x - 4, y - 4, ww + 8, wh + 8);
+    ctx.restore();
+
+    /* Divisórias do caixilho */
+    ctx.strokeStyle = '#1a2c4c';
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + ww / 2, y);
+    ctx.lineTo(x + ww / 2, y + wh);
+    ctx.moveTo(x, y + wh * 0.44);
+    ctx.lineTo(x + ww, y + wh * 0.44);
+    ctx.stroke();
+
+    /* Borda do caixilho */
+    ctx.strokeStyle = '#2e5076';
+    ctx.lineWidth   = 1.2;
+    ctx.strokeRect(x, y, ww, wh);
+
+    /* Peitoril */
+    ctx.fillStyle = '#243c58';
+    ctx.fillRect(x - 5, y + wh, ww + 10, 5);
+    ctx.strokeStyle = 'rgba(55,95,160,0.28)';
+    ctx.lineWidth   = 0.4;
+    ctx.strokeRect(x - 5, y + wh, ww + 10, 5);
+  }
+
+  #drawDoor(ctx, w, h) {
+    const dx = w * 0.715, dy = h * 0.565;
+    const dw = w * 0.085, dh = h * 0.213;
+
+    /* Moldura externa */
+    ctx.fillStyle = '#1e3254';
+    ctx.fillRect(dx - 4, dy - 4, dw + 8, dh + 4);
+
+    /* Corpo da porta */
+    const dGrd = ctx.createLinearGradient(dx, dy, dx + dw, dy);
+    dGrd.addColorStop(0,   '#0d1c2e');
+    dGrd.addColorStop(0.6, '#091420');
+    dGrd.addColorStop(1,   '#060d16');
+    ctx.fillStyle = dGrd;
+    ctx.fillRect(dx, dy, dw, dh);
+
+    /* Painéis decorativos */
+    ctx.strokeStyle = 'rgba(55,100,165,0.28)';
+    ctx.lineWidth   = 0.8;
+    ctx.strokeRect(dx + dw * 0.13, dy + dh * 0.05, dw * 0.74, dh * 0.36);
+    ctx.strokeRect(dx + dw * 0.13, dy + dh * 0.48, dw * 0.74, dh * 0.44);
+
+    /* Bandeira (janelinha acima da porta) */
+    const twh = dh * 0.15;
+    const txGrd = ctx.createLinearGradient(dx, dy - twh - 4, dx, dy);
+    txGrd.addColorStop(0, 'rgba(255,198,70,0.17)');
+    txGrd.addColorStop(1, 'rgba(255,138,28,0.06)');
+    ctx.fillStyle = txGrd;
+    ctx.fillRect(dx, dy - twh - 4, dw, twh);
+    ctx.strokeStyle = '#2a4262';
+    ctx.lineWidth   = 0.8;
+    ctx.strokeRect(dx, dy - twh - 4, dw, twh);
+    ctx.beginPath();
+    ctx.moveTo(dx + dw / 2, dy - twh - 4);
+    ctx.lineTo(dx + dw / 2, dy - 4);
+    ctx.stroke();
+
+    /* Maçaneta */
+    ctx.save();
+    ctx.shadowBlur  = 5;
+    ctx.shadowColor = 'rgba(100,160,255,0.35)';
+    ctx.fillStyle   = '#4a78b4';
+    ctx.beginPath();
+    ctx.arc(dx + dw * 0.83, dy + dh * 0.50, h * 0.010, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.strokeStyle = '#2a4870';
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(dx, dy, dw, dh);
+  }
+
+  #drawLamp(ctx, w, h) {
+    const lx = w * 0.757, ly = h * 0.547;
+
+    /* Braço curvo da lanterna */
+    ctx.strokeStyle = '#384e6a';
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.moveTo(lx, ly - h * 0.022);
+    ctx.quadraticCurveTo(lx - w * 0.012, ly - h * 0.011, lx, ly);
+    ctx.stroke();
+
+    /* Glow difuso na parede */
+    const glw = ctx.createRadialGradient(lx, ly + h * 0.007, 0, lx, ly + h * 0.007, h * 0.058);
+    glw.addColorStop(0,   'rgba(255,202,80,0.46)');
+    glw.addColorStop(0.4, 'rgba(255,162,40,0.15)');
+    glw.addColorStop(1,   'transparent');
+    ctx.save();
+    ctx.fillStyle = glw;
+    ctx.beginPath();
+    ctx.arc(lx, ly + h * 0.007, h * 0.058, 0, Math.PI * 2);
+    ctx.fill();
+
+    /* Bulbo */
+    ctx.shadowBlur  = 10;
+    ctx.shadowColor = 'rgba(255,208,80,0.68)';
+    ctx.fillStyle   = 'rgba(255,220,100,0.84)';
+    ctx.beginPath();
+    ctx.arc(lx, ly, h * 0.009, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  #drawShrubs(ctx, w, h) {
+    for (const [sx, sy, rw, rh] of [
+      [w * 0.302, h * 0.757, w * 0.028, h * 0.025],
+      [w * 0.348, h * 0.763, w * 0.019, h * 0.018],
+      [w * 0.848, h * 0.759, w * 0.026, h * 0.024],
+      [w * 0.887, h * 0.764, w * 0.017, h * 0.016],
+    ]) {
+      ctx.save();
+      const shGrd = ctx.createRadialGradient(sx, sy, 0, sx, sy, Math.max(rw, rh));
+      shGrd.addColorStop(0,    'rgba(16,46,14,0.94)');
+      shGrd.addColorStop(0.65, 'rgba(9,30,8,0.84)');
+      shGrd.addColorStop(1,    'rgba(3,16,3,0.28)');
+      ctx.fillStyle = shGrd;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, rw, rh, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 }
 

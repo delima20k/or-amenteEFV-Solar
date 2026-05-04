@@ -843,6 +843,41 @@ class ShareController {
 }
 
 /* ===================================================
+   TYPEWRITER EFFECT
+   =================================================== */
+class TypewriterEffect {
+  #el;
+  #fullText;
+  #charIdx  = 0;
+  #timerId  = null;
+  static #START_DELAY   = 1500;
+  static #CHAR_INTERVAL = 52;
+
+  constructor(selector) {
+    this.#el = document.querySelector(selector);
+    if (!this.#el) return;
+    this.#fullText = this.#el.textContent;
+    this.#el.textContent = '';
+    this.#el.classList.add('home-tagline--typing');
+    this.#timerId = setTimeout(() => this.#type(), TypewriterEffect.#START_DELAY);
+  }
+
+  #type() {
+    if (this.#charIdx >= this.#fullText.length) {
+      this.#el.classList.remove('home-tagline--typing');
+      return;
+    }
+    this.#el.textContent = this.#fullText.slice(0, ++this.#charIdx);
+    this.#el.classList.add('home-tagline--typing');
+    this.#timerId = setTimeout(() => this.#type(), TypewriterEffect.#CHAR_INTERVAL);
+  }
+
+  destroy() {
+    if (this.#timerId) { clearTimeout(this.#timerId); this.#timerId = null; }
+  }
+}
+
+/* ===================================================
    APLICAÇÃO PRINCIPAL
    =================================================== */
 class EfvSolarApp {
@@ -856,6 +891,7 @@ class EfvSolarApp {
   #shareCtrl           = null;
   #pwaCtrl             = null;
   #animacao            = null;
+  #typewriter          = null;
   #sheetAberto         = false;
 
   constructor() {
@@ -874,6 +910,7 @@ class EfvSolarApp {
     this.#pwaCtrl         = new PwaInstallController();
     const canvas = document.getElementById('solar-canvas');
     if (canvas) this.#animacao = new AnimationController(canvas);
+    this.#typewriter = new TypewriterEffect('.home-tagline');
     this.#vincularEventos();
     EfvSolarApp.#registrarServiceWorker();
   }
