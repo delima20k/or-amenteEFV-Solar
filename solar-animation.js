@@ -601,6 +601,324 @@ class PhaseLabel {
 }
 
 /* ============================================================
+   ENERGY FLOW ANIMATION — Fase 6 (partículas no cabo AC)
+   ============================================================ */
+class EnergyFlowAnimation {
+  #ctx; #scene; #w; #h;
+  #progress = 0;
+  #time     = 0;
+  #path     = null;
+  #totalLen = 0;
+
+  constructor(ctx, scene, w, h) {
+    this.#ctx   = ctx;
+    this.#scene = scene;
+    this.#w     = w;
+    this.#h     = h;
+    this.#buildPath();
+  }
+
+  /** Waypoints: saída calha → drop → inversor → quadro elétrico */
+  #buildPath() {
+    const w = this.#w, h = this.#h;
+    this.#path = [
+      this.#scene.point(0.50, 0.93),
+      this.#scene.point(0.94, 0.93),
+      { x: w * 0.835, y: h * 0.60  },
+      { x: w * 0.835, y: h * 0.655 },
+      { x: w * 0.58,  y: h * 0.655 },
+      { x: w * 0.50,  y: h * 0.655 },
+    ];
+    this.#totalLen = this.#calcLen(this.#path.length - 1);
+  }
+
+  #calcLen(upToIdx) {
+    let len = 0;
+    for (let i = 1; i <= upToIdx; i++) {
+      const dx = this.#path[i].x - this.#path[i - 1].x;
+      const dy = this.#path[i].y - this.#path[i - 1].y;
+      len += Math.sqrt(dx * dx + dy * dy);
+    }
+    return len;
+  }
+
+  #pointAt(frac) {
+    let target = frac * this.#totalLen;
+    for (let i = 1; i < this.#path.length; i++) {
+      const dx  = this.#path[i].x - this.#path[i - 1].x;
+      const dy  = this.#path[i].y - this.#path[i - 1].y;
+      const seg = Math.sqrt(dx * dx + dy * dy);
+      if (target <= seg) {
+        const t = seg > 0 ? target / seg : 0;
+        return { x: this.#path[i - 1].x + dx * t, y: this.#path[i - 1].y + dy * t };
+      }
+      target -= seg;
+    }
+    return { ...this.#path[this.#path.length - 1] };
+  }
+
+  update(t)    { this.#progress = t; }
+  tick(dt)     { this.#time += dt; }
+  reset()      { this.#progress = 0; this.#time = 0; }
+
+  draw() {
+    if (this.#progress <= 0) return;
+    const t = EasingFunctions.outCubic(this.#progress);
+    this.#drawCable(t);
+    this.#drawParticles(t);
+  }
+
+  #drawCable(t) {
+    const ctx    = this.#ctx;
+    const maxD   = t * this.#totalLen;
+    let traveled = 0;
+    ctx.save();
+    ctx.shadowBlur  = 8;
+    ctx.shadowColor = '#ff9900';
+    ctx.strokeStyle = '#ff7700';
+    ctx.lineWidth   = 2.5;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.beginPath();
+    ctx.moveTo(this.#path[0].x, this.#path[0].y);
+    for (let i = 1; i < this.#path.length; i++) {
+      const dx  = this.#path[i].x - this.#path[i - 1].x;
+      const dy  = this.#path[i].y - this.#path[i - 1].y;
+      const seg = Math.sqrt(dx * dx + dy * dy);
+      if (traveled + seg <= maxD) {
+        ctx.lineTo(this.#path[i].x, this.#path[i].y);
+        traveled += seg;
+      } else {
+        const f = seg > 0 ? (maxD - traveled) / seg : 0;
+        ctx.lineTo(this.#path[i - 1].x + dx * f, this.#path[i - 1].y + dy * f);
+        break;
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  #drawParticles(revealT) {
+    const ctx = this.#ctx;
+    const N   = 5;
+    const spd = 0.55;   // ciclos por segundo
+    for (let i = 0; i < N; i++) {
+      const frac = ((this.#time * spd + i / N) % 1);
+      if (frac > revealT) continue;
+      const pos = this.#pointAt(frac);
+      const brightness = 0.6 + 0.4 * Math.sin(this.#time * 8 + i * 1.3);
+      ctx.save();
+      ctx.shadowBlur  = 16;
+      ctx.shadowColor = '#ffe040';
+      ctx.fillStyle   = `rgba(255,225,60,${brightness})`;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+/* ============================================================
+   CAMERA CONTROLLER — Fase 7 (pan para parede / quadro)
+   ============================================================ */
+class CameraController {
+  #w; #h;
+  #progress = 0;
+  static #FOCUS_UX = 0.50;
+  static #FOCUS_UY = 0.67;
+  static #ZOOM_MAX = 1.68;
+
+  constructor(w, h) { this.#w = w; this.#h = h; }
+
+  update(t) { this.#progress = EasingFunctions.inOutCubic(t); }
+  reset()   { this.#progress = 0; }
+
+  applyTransform(ctx) {
+    if (this.#progress <= 0) return;
+    const t  = this.#progress;
+    const w  = this.#w, h = this.#h;
+    const fx = w * CameraController.#FOCUS_UX;
+    const fy = h * CameraController.#FOCUS_UY;
+    const zoom = GeometryUtils.lerp(1, CameraController.#ZOOM_MAX, t);
+    const cx   = GeometryUtils.lerp(w / 2, fx, t);
+    const cy   = GeometryUtils.lerp(h / 2, fy, t);
+    ctx.translate(w / 2, h / 2);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-cx, -cy);
+  }
+}
+
+/* ============================================================
+   ELECTRICAL PANEL ANIMATION — Fase 7/8 (quadro + disjuntores)
+   ============================================================ */
+class ElectricalPanelAnimation {
+  #ctx; #w; #h;
+  #showProgress    = 0;
+  #breakerProgress = 0;
+
+  constructor(ctx, w, h) { this.#ctx = ctx; this.#w = w; this.#h = h; }
+
+  updateShow(t)     { this.#showProgress    = EasingFunctions.outCubic(t); }
+  updateBreakers(t) { this.#breakerProgress = t; }
+  reset() { this.#showProgress = 0; this.#breakerProgress = 0; }
+
+  draw() {
+    if (this.#showProgress <= 0) return;
+    const ctx = this.#ctx, w = this.#w, h = this.#h;
+    const t   = this.#showProgress;
+    const pw  = w * 0.115, ph = h * 0.175;
+    const px  = w * 0.443;
+    const py  = h * 0.535 + (1 - t) * h * 0.10;
+
+    ctx.save();
+    ctx.globalAlpha = t;
+
+    /* Sombra */
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(px + 5, py + 6, pw, ph);
+
+    /* Corpo */
+    const bg = ctx.createLinearGradient(px, py, px + pw, py + ph);
+    bg.addColorStop(0, '#1c2b3e');
+    bg.addColorStop(1, '#0e1820');
+    ctx.fillStyle = bg;
+    ctx.fillRect(px, py, pw, ph);
+
+    /* Etiqueta */
+    ctx.fillStyle = `rgba(150,185,230,${t * 0.75})`;
+    ctx.font      = `bold ${Math.max(7, Math.floor(h * 0.017))}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText('Q.E.', px + pw / 2, py + ph * 0.12);
+
+    /* 3 disjuntores */
+    const numB   = 3;
+    const bw = pw * 0.20, bh = ph * 0.33;
+    const bGap = pw / (numB + 1);
+    for (let i = 0; i < numB; i++) {
+      const bx    = px + bGap * (i + 1) - bw / 2;
+      const by    = py + ph * 0.20;
+      const delay = i / numB;
+      const bt    = EasingFunctions.clamp(
+        (this.#breakerProgress - delay) / Math.max(0.01, 1 - delay * 0.7), 0, 1
+      );
+      this.#drawBreaker(ctx, bx, by, bw, bh, bt, h);
+    }
+
+    /* Chave geral */
+    this.#drawMainSwitch(ctx, px + pw * 0.5, py + ph * 0.83, pw * 0.34, ph * 0.11, this.#breakerProgress, h);
+
+    /* Borda */
+    ctx.strokeStyle = '#3a5878';
+    ctx.lineWidth   = 1.5;
+    ctx.strokeRect(px, py, pw, ph);
+
+    ctx.restore();
+  }
+
+  #drawBreaker(ctx, x, y, bw, bh, activated, h) {
+    ctx.fillStyle = activated > 0.5 ? 'rgba(12,35,18,1)' : 'rgba(22,20,35,1)';
+    ctx.fillRect(x, y, bw, bh);
+
+    /* Alavanca */
+    const leverY = activated > 0.5 ? y + bh * 0.18 : y + bh * 0.58;
+    ctx.fillStyle = activated > 0.5 ? '#50cc50' : '#cc3030';
+    ctx.fillRect(x + bw * 0.2, leverY, bw * 0.6, bh * 0.22);
+
+    /* LED */
+    if (activated > 0) {
+      ctx.save();
+      ctx.shadowBlur  = 10 * activated;
+      ctx.shadowColor = '#30ff50';
+      ctx.fillStyle   = `rgba(50,220,70,${activated})`;
+      ctx.beginPath();
+      ctx.arc(x + bw / 2, y + bh * 0.88, Math.max(1.5, bw * 0.20), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.strokeStyle = '#243244';
+    ctx.lineWidth   = 0.5;
+    ctx.strokeRect(x, y, bw, bh);
+  }
+
+  #drawMainSwitch(ctx, cx, cy, sw, sh, t, h) {
+    const on = EasingFunctions.clamp(t * 1.6, 0, 1);
+    ctx.fillStyle = on > 0.5 ? '#122818' : '#261616';
+    ctx.fillRect(cx - sw / 2, cy - sh / 2, sw, sh);
+    if (on > 0) {
+      ctx.save();
+      ctx.shadowBlur  = 14 * on;
+      ctx.shadowColor = '#00ff90';
+      ctx.fillStyle   = `rgba(0,230,120,${on})`;
+      ctx.beginPath();
+      ctx.arc(cx + sw * 0.28, cy, Math.max(2, sh * 0.32), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.strokeStyle = '#2e4460';
+    ctx.lineWidth   = 0.5;
+    ctx.strokeRect(cx - sw / 2, cy - sh / 2, sw, sh);
+  }
+}
+
+/* ============================================================
+   WINDOW GLOW ANIMATION — Fase 9 (janelas acendem)
+   ============================================================ */
+class WindowGlowAnimation {
+  #ctx; #w; #h;
+  #progress = 0;
+  #time     = 0;
+
+  static #WINDOWS = [
+    { ux: 0.37, uy: 0.52, uw: 0.10, uh: 0.09 },
+    { ux: 0.60, uy: 0.52, uw: 0.10, uh: 0.09 },
+  ];
+
+  constructor(ctx, w, h) { this.#ctx = ctx; this.#w = w; this.#h = h; }
+
+  update(t)  { this.#progress = t; }
+  tick(dt)   { this.#time += dt; }
+  reset()    { this.#progress = 0; this.#time = 0; }
+
+  draw() {
+    if (this.#progress <= 0) return;
+    const ctx = this.#ctx, w = this.#w, h = this.#h;
+    const t   = EasingFunctions.outCubic(this.#progress);
+    const pulse = 0.82 + 0.18 * Math.sin(this.#time * 3.2);
+
+    for (const [i, win] of WindowGlowAnimation.#WINDOWS.entries()) {
+      const delay = i * 0.28;
+      const wt    = EasingFunctions.outCubic(
+        EasingFunctions.clamp((t - delay) / Math.max(0.01, 1 - delay * 0.7), 0, 1)
+      );
+      if (wt <= 0) continue;
+
+      const wx = w * win.ux, wy = h * win.uy;
+      const ww = w * win.uw, wh = h * win.uh;
+      const alpha = wt * pulse;
+
+      ctx.save();
+      ctx.shadowBlur  = 22 * wt;
+      ctx.shadowColor = 'rgba(255,195,50,0.85)';
+
+      const grd = ctx.createRadialGradient(
+        wx + ww / 2, wy + wh / 2, 0,
+        wx + ww / 2, wy + wh / 2, Math.max(ww, wh)
+      );
+      grd.addColorStop(0, `rgba(255,225,80,${alpha * 0.70})`);
+      grd.addColorStop(1, `rgba(255,150,20,${alpha * 0.12})`);
+      ctx.fillStyle = grd;
+      ctx.fillRect(wx, wy, ww, wh);
+
+      /* Halo externo */
+      ctx.fillStyle = `rgba(255,185,40,${alpha * 0.10})`;
+      ctx.fillRect(wx - 10, wy - 10, ww + 20, wh + 20);
+      ctx.restore();
+    }
+  }
+}
+
+/* ============================================================
    ANIMATION CONTROLLER — orquestra todas as fases
    ============================================================ */
 class AnimationController {
@@ -616,13 +934,17 @@ class AnimationController {
   #inverter;
   #panels;
   #label;
+  #energyFlow;
+  #camera;
+  #electricPanel;
+  #windowGlow;
 
   /**
    * Timeline: segundo em que cada fase COMEÇA
    * Duração de cada fase (usada para calcular t 0→1)
    */
-  static #TL = { p1: 0.2, p2: 2.0, p3: 3.8, p4: 5.2, p5: 8.4 };
-  static #DU = { p1: 1.6, p2: 1.5, p3: 1.3, p4: 2.8, p5: 2.5 };
+  static #TL = { p1: 0.2, p2: 2.0, p3: 3.8, p4: 5.2, p5: 8.4, p6: 10.5, p7: 12.0, p8: 14.2, p9: 15.8 };
+  static #DU = { p1: 1.6, p2: 1.5, p3: 1.3, p4: 2.8, p5: 2.5, p6: 2.2,  p7: 2.2,  p8: 2.2,  p9: 2.5  };
 
   constructor(canvas) {
     this.#canvas = canvas;
@@ -644,12 +966,16 @@ class AnimationController {
 
   #build() {
     const ctx = this.#ctx, w = this.#w, h = this.#h;
-    this.#scene     = new RoofScene(ctx, w, h);
-    this.#structure = new StructureAnimation(ctx, this.#scene);
-    this.#cables    = new CableAnimation(ctx, this.#scene, h);
-    this.#inverter  = new InverterAnimation(ctx, w, h);
-    this.#panels    = new PanelAnimation(ctx, this.#scene);
-    this.#label     = new PhaseLabel(ctx, w, h);
+    this.#scene         = new RoofScene(ctx, w, h);
+    this.#structure     = new StructureAnimation(ctx, this.#scene);
+    this.#cables        = new CableAnimation(ctx, this.#scene, h);
+    this.#inverter      = new InverterAnimation(ctx, w, h);
+    this.#panels        = new PanelAnimation(ctx, this.#scene);
+    this.#label         = new PhaseLabel(ctx, w, h);
+    this.#energyFlow    = new EnergyFlowAnimation(ctx, this.#scene, w, h);
+    this.#camera        = new CameraController(w, h);
+    this.#electricPanel = new ElectricalPanelAnimation(ctx, w, h);
+    this.#windowGlow    = new WindowGlowAnimation(ctx, w, h);
   }
 
   #loop(ts) {
@@ -677,10 +1003,21 @@ class AnimationController {
     this.#inverter.update(this.#phaseT(tl.p3, du.p3));
     this.#panels.update(this.#phaseT(tl.p4, du.p4));
     this.#panels.updateEnergy(this.#phaseT(tl.p5, du.p5));
+    this.#energyFlow.update(this.#phaseT(tl.p6, du.p6));
+    this.#energyFlow.tick(dt);
+    this.#camera.update(this.#phaseT(tl.p7, du.p7));
+    this.#electricPanel.updateShow(this.#phaseT(tl.p7, du.p7));
+    this.#electricPanel.updateBreakers(this.#phaseT(tl.p8, du.p8));
+    this.#windowGlow.update(this.#phaseT(tl.p9, du.p9));
+    this.#windowGlow.tick(dt);
 
     /* Determina label da fase atual */
     let label = '', isActive = false;
-    if      (e >= tl.p5) { label = 'Sistema Ativo ⚡'; isActive = true; }
+    if      (e >= tl.p9) { label = 'Sistema em Operação ✓'; isActive = true; }
+    else if (e >= tl.p8) { label = 'Disjuntor Ativado ⚡';   isActive = true; }
+    else if (e >= tl.p7) { label = 'Quadro Elétrico'; }
+    else if (e >= tl.p6) { label = 'Fluxo de Energia'; }
+    else if (e >= tl.p5) { label = 'Sistema Ativo ⚡';       isActive = true; }
     else if (e >= tl.p4) { label = 'Painéis Solares'; }
     else if (e >= tl.p3) { label = 'Inversor'; }
     else if (e >= tl.p2) { label = 'Cabeamento'; }
@@ -688,21 +1025,30 @@ class AnimationController {
 
     this.#label.set(label);
     this.#label.update(dt);
-    this.#label.draw(isActive);
   }
 
   #draw() {
-    this.#ctx.clearRect(0, 0, this.#w, this.#h);
+    const ctx = this.#ctx, w = this.#w, h = this.#h;
+    ctx.clearRect(0, 0, w, h);
+
+    /* Aplicar transformação de câmera (pan p/ parede) */
+    ctx.save();
+    this.#camera.applyTransform(ctx);
+
     this.#scene.draw();
     this.#structure.draw();
     this.#cables.draw();
     this.#inverter.draw();
     this.#panels.draw();
+    this.#energyFlow.draw();
+    this.#electricPanel.draw();
+    this.#windowGlow.draw();
 
-    /* Chamamos draw do label aqui (já foi atualizado em #update) */
+    ctx.restore();
+
+    /* HUD — sempre em screen space */
     const tl = AnimationController.#TL;
-    const e  = this.#elapsed;
-    const isActive = e >= tl.p5;
+    const isActive = this.#elapsed >= tl.p5;
     this.#label.draw(isActive);
   }
 
@@ -711,6 +1057,10 @@ class AnimationController {
     this.#elapsed = 0;
     this.#lastTs  = 0;
     this.#panels.reset();
+    this.#energyFlow.reset();
+    this.#camera.reset();
+    this.#electricPanel.reset();
+    this.#windowGlow.reset();
   }
 
   /** Para o loop RAF e libera recursos */
