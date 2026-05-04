@@ -1430,6 +1430,24 @@ class AnimationController {
     this.#camera.reset();
     this.#electricPanel.reset();
     this.#windowGlow.reset();
+    this.iniciar();
+  }
+
+  /** Para o loop RAF imediatamente (troca de tela) */
+  parar() {
+    if (this.#rafId !== null) {
+      cancelAnimationFrame(this.#rafId);
+      this.#rafId = null;
+    }
+    this.#slowMode = false;
+    this.#canvas.classList.remove('home-canvas--slow');
+  }
+
+  /** Retoma o loop RAF (voltou para a home) */
+  iniciar() {
+    if (this.#rafId !== null) return;
+    this.#lastTs = 0;
+    this.#rafId = requestAnimationFrame(t => this.#loop(t));
   }
 
   /** Para o loop RAF e libera recursos */

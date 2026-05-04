@@ -1008,6 +1008,12 @@ class EfvSolarApp {
       document.body.classList.remove('sheet-open', 'sheet-closing');
       this.#sheetAberto = false;
     }
+    /* Parar RAF ao sair da home; retomar ao voltar */
+    if (tela === 'home') {
+      this.#animacao?.iniciar();
+    } else {
+      this.#animacao?.parar();
+    }
     if (tela === 'orcamentos') this.#orcamentosCtrl.render();
     if (tela === 'financas')   this.#financasCtrl.render();
   }
@@ -1043,7 +1049,6 @@ class EfvSolarApp {
   #abrirSheet() {
     if (this.#sheetAberto) return;
     this.#sheetAberto = true;
-    this.#animacao?.pausar();
     document.body.classList.add('sheet-open');
     this.#router.navegar('formulario');
   }
@@ -1055,7 +1060,6 @@ class EfvSolarApp {
     setTimeout(() => {
       document.body.classList.remove('sheet-open', 'sheet-closing');
       this.#sheetAberto = false;
-      this.#animacao?.retomar();
       this.#router.navegar('home');
     }, 270);
   }
