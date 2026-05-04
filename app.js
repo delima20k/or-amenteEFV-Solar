@@ -15,7 +15,8 @@ const FIELDS = [
   { id: 'economia_mensal', label: 'Economia Mensal',     section: 'financeiro'    },
   { id: 'economia_anual',  label: 'Economia Anual',      section: 'financeiro'    },
   { id: 'investimento',    label: 'Investimento',        section: 'financeiro'    },
-  { id: 'economia_30',     label: 'Economia em 30 Anos', section: 'financeiro'    },
+  { id: 'economia_30',     label: 'Economia no Período',  section: 'financeiro'    },
+  { id: 'periodo_anos',    label: 'Período de Economia',  section: 'financeiro'    },
 ];
 
 const SECTIONS = {
@@ -374,26 +375,33 @@ class TarifaService {
    TELA CALCULADORA SOLAR
    =================================================== */
 class CalculadoraController {
-  static #CRESCIMENTO = 0.06;
+  static #CRESCIMENTO_DEFAULT = 0.06;
   static #TARIFA_KWH  = 0.982; /* atualizado assincronamente */
 
   #slider;
   #sliderAnos;
+  #sliderPct;
   #displayConsumo;
   #displayAnos;
+  #displayPct;
   #displayConta;
   #btnMenos;
   #btnMais;
   #btnAnosMenos;
   #btnAnosMais;
+  #btnPctMenos;
+  #btnPctMais;
   #btnCalc;
   #resultado;
   #fillConsumo;
   #fillAnos;
+  #fillPct;
   #thumbConsumoWrap;
   #thumbAnosWrap;
+  #thumbPctWrap;
   #lightningConsumo;
   #lightningAnos;
+  #lightningPct;
   #faturaPrev;
   #tarifaDisplay;
   #tarifaStatus;
@@ -403,21 +411,28 @@ class CalculadoraController {
   constructor() {
     this.#slider          = document.getElementById('slider-consumo');
     this.#sliderAnos      = document.getElementById('slider-anos');
+    this.#sliderPct       = document.getElementById('slider-pct');
     this.#displayConsumo  = document.getElementById('valor-consumo');
     this.#displayAnos     = document.getElementById('valor-anos');
+    this.#displayPct      = document.getElementById('valor-pct');
     this.#displayConta    = document.getElementById('display-conta');
     this.#btnMenos        = document.getElementById('btn-menos');
     this.#btnMais         = document.getElementById('btn-mais');
     this.#btnAnosMenos    = document.getElementById('btn-anos-menos');
     this.#btnAnosMais     = document.getElementById('btn-anos-mais');
+    this.#btnPctMenos     = document.getElementById('btn-pct-menos');
+    this.#btnPctMais      = document.getElementById('btn-pct-mais');
     this.#btnCalc         = document.getElementById('btn-calcular');
     this.#resultado       = document.getElementById('calc-resultado');
     this.#fillConsumo     = document.getElementById('fill-consumo');
     this.#fillAnos        = document.getElementById('fill-anos');
+    this.#fillPct         = document.getElementById('fill-pct');
     this.#thumbConsumoWrap= document.getElementById('thumb-consumo-wrap');
     this.#thumbAnosWrap   = document.getElementById('thumb-anos-wrap');
+    this.#thumbPctWrap    = document.getElementById('thumb-pct-wrap');
     this.#lightningConsumo= document.getElementById('lightning-consumo');
     this.#lightningAnos   = document.getElementById('lightning-anos');
+    this.#lightningPct    = document.getElementById('lightning-pct');
     this.#faturaPrev      = document.getElementById('fatura-preview');
     this.#tarifaDisplay   = document.getElementById('tarifa-display');
     this.#tarifaStatus    = document.getElementById('tarifa-status');
@@ -425,6 +440,7 @@ class CalculadoraController {
     this.#bind();
     this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
     this.#syncSliderAnos();
+    this.#syncSliderPct();
     this.#atualizarConta();
     this.#carregarTarifa();
   }
@@ -483,6 +499,21 @@ class CalculadoraController {
       this.#dispararRaios(this.#lightningAnos);
     });
 
+    this.#sliderPct.addEventListener('input', () => {
+      this.#syncSliderPct();
+      this.#dispararRaios(this.#lightningPct);
+    });
+    this.#btnPctMenos.addEventListener('click', () => {
+      this.#sliderPct.value = Math.max(1, +this.#sliderPct.value - 1);
+      this.#syncSliderPct();
+      this.#dispararRaios(this.#lightningPct);
+    });
+    this.#btnPctMais.addEventListener('click', () => {
+      this.#sliderPct.value = Math.min(15, +this.#sliderPct.value + 1);
+      this.#syncSliderPct();
+      this.#dispararRaios(this.#lightningPct);
+    });
+
     this.#btnCalc.addEventListener('click', () => this.#calcular());
   }
 
@@ -504,6 +535,15 @@ class CalculadoraController {
     if (this.#thumbAnosWrap)  this.#thumbAnosWrap.style.left  = pct + '%';
     this.#sliderAnos.style.setProperty('--slider-pct', pct.toFixed(1) + '%');
     if (this.#displayAnos) this.#displayAnos.textContent = v;
+  }
+
+  #syncSliderPct() {
+    const v   = +this.#sliderPct.value;
+    const pct = ((v - 1) / (15 - 1) * 100);
+    if (this.#fillPct)      this.#fillPct.style.width     = pct + '%';
+    if (this.#thumbPctWrap) this.#thumbPctWrap.style.left = pct + '%';
+    this.#sliderPct.style.setProperty('--slider-pct', pct.toFixed(1) + '%');
+    if (this.#displayPct) this.#displayPct.textContent = v;
   }
 
   #atualizarConta() {
@@ -543,7 +583,7 @@ class CalculadoraController {
     const consumo = +this.#slider.value;
     const anos    = +this.#sliderAnos.value;
     const tarifa  = CalculadoraController.#TARIFA_KWH;
-    const taxa    = CalculadoraController.#CRESCIMENTO;
+    const taxa    = +this.#sliderPct.value / 100;
 
     const faturaMensal = consumo * tarifa;
     const faturaAnual  = faturaMensal * 12;
@@ -634,8 +674,9 @@ class CalculadoraController {
     set('economia_mensal', c.economia_mensal);
     set('economia_anual',  c.economia_anual);
     set('economia_30',     c.economia_periodo);
+    set('periodo_anos',    c.anos + ' anos');
     set('investimento',    c.investimento);
-    set('inflacao',        (CalculadoraController.#CRESCIMENTO * 100).toFixed(0) + '%');
+    set('inflacao',        (c.taxa * 100).toFixed(0) + '% a.a.');
     set('economia',        `${c.consumo} kWh/mês — Retorno em ${c.retornoMeses} meses`);
     document.querySelectorAll('[data-tela="formulario"]')[0]?.click();
   }

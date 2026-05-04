@@ -647,6 +647,7 @@ body {
 .calc-dot--cyan  { background: var(--cyan); }
 .calc-dot--gold  { background: var(--gold); }
 .calc-dot--green { background: #22c55e; }
+.calc-dot--orange{ background: #f97316; }
 
 /* ===== CALCULADORA — DISPLAY CONTA (automático) ===== */
 .calc-conta-display-wrap {
@@ -879,6 +880,11 @@ body {
   box-shadow: 0 0 8px rgba(34,197,94,0.45);
 }
 
+.slider-fill--orange {
+  background: linear-gradient(90deg, #f97316, #fdba74);
+  box-shadow: 0 0 8px rgba(249,115,22,0.45);
+}
+
 /* Thumb realista */
 .slider-thumb-wrap {
   position: absolute;
@@ -906,6 +912,11 @@ body {
 .slider-thumb--green {
   background: radial-gradient(circle at 35% 35%, #86efac, #22c55e 60%, #15803d);
   box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 2px rgba(34,197,94,0.3), inset 0 1px 2px rgba(255,255,255,0.4);
+}
+
+.slider-thumb--orange {
+  background: radial-gradient(circle at 35% 35%, #fdba74, #f97316 60%, #c2410c);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 2px rgba(249,115,22,0.3), inset 0 1px 2px rgba(255,255,255,0.4);
 }
 
 .thumb-inner {

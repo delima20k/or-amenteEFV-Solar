@@ -184,8 +184,12 @@
               <input type="text" id="investimento" name="investimento" class="form-input" placeholder="Ex: R$ 25.000,00">
             </div>
             <div class="form-group">
-              <label for="economia_30" class="form-label">Economia em 30 Anos</label>
+              <label for="economia_30" class="form-label">Economia no Período</label>
               <input type="text" id="economia_30" name="economia_30" class="form-input" placeholder="Ex: R$ 180.000,00">
+            </div>
+            <div class="form-group">
+              <label for="periodo_anos" class="form-label">Período de Economia</label>
+              <input type="text" id="periodo_anos" name="periodo_anos" class="form-input" placeholder="Ex: 20 anos">
             </div>
           </div>
         </fieldset>
@@ -350,6 +354,39 @@
             <div class="slider-value-display">
               <span id="valor-anos" class="slider-current-value" style="font-size:1.5rem">20</span>
               <span class="slider-unit">anos de projeção</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- BLOCO CRESCIMENTO TARIFÁRIO -->
+        <div class="calc-block">
+          <div class="calc-section-label">
+            <span class="calc-section-dot calc-dot--orange"></span>Crescimento Tarifário Anual
+          </div>
+          <div class="slider-track-container" id="slider-pct-container">
+            <div class="slider-lightning-wrap" id="lightning-pct" aria-hidden="true"></div>
+            <div class="slider-knob-row">
+              <button id="btn-pct-menos" class="knob-btn" type="button" aria-label="Diminuir porcentagem">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+              <div class="slider-body">
+                <div class="slider-rail">
+                  <div class="slider-fill slider-fill--orange" id="fill-pct"></div>
+                  <div class="slider-thumb-wrap" id="thumb-pct-wrap">
+                    <div class="slider-thumb slider-thumb--orange" id="thumb-pct">
+                      <div class="thumb-inner"></div>
+                    </div>
+                  </div>
+                </div>
+                <input type="range" id="slider-pct" class="slider-hidden" min="1" max="15" step="1" value="6" aria-label="Crescimento tarifário anual em %">
+              </div>
+              <button id="btn-pct-mais" class="knob-btn knob-btn--plus" type="button" aria-label="Aumentar porcentagem">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+            </div>
+            <div class="slider-value-display">
+              <span id="valor-pct" class="slider-current-value" style="font-size:1.5rem">6</span>
+              <span class="slider-unit">% ao ano</span>
             </div>
           </div>
         </div>
