@@ -148,11 +148,14 @@ class Router {
 class OrcamentosController {
   #container;
   #logoBase64;
+  #shareCtrl = null;
 
   constructor(logoBase64) {
     this.#container  = document.getElementById('lista-orcamentos');
     this.#logoBase64 = logoBase64;
   }
+
+  setShareCtrl(ctrl) { this.#shareCtrl = ctrl; }
 
   render() {
     const lista = OrcamentoStorage.listar();
@@ -179,6 +182,13 @@ class OrcamentosController {
           <div class="orc-card-data">${o.data}</div>
         </div>
         <div class="orc-card-actions">
+          <button class="btn-icon btn-icon--share" title="Compartilhar" data-acao="share" data-id="${o.id}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+          </button>
           <button class="btn-icon btn-icon--pdf" title="Abrir PDF" data-acao="pdf" data-id="${o.id}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -211,6 +221,12 @@ class OrcamentosController {
         } else if (acao === 'pdf') {
           const item = OrcamentoStorage.listar().find(o => o.id === id);
           if (item) this.#abrirPDF(item);
+        } else if (acao === 'share') {
+          const item = OrcamentoStorage.listar().find(o => o.id === id);
+          if (item && this.#shareCtrl) {
+            const html = PrintBuilder.build(item.dados, this.#logoBase64);
+            this.#shareCtrl.abrir(html, item.nome || 'Orçamento');
+          }
         }
       });
     });
@@ -820,14 +836,31 @@ class ShareController {
     return `Orçamento EFV Solar — ${this.#nomeAtual}\nProfissional: Lino M. DE AZEVEDO | (11) 97239-5317\nhttps://www.instagram.com/efvsolar_oficia`;
   }
 
+  /* Baixa o orçamento como arquivo HTML silenciosamente (sem popup) */
+  #downloadSilencioso() {
+    if (!this.#htmlAtual) return;
+    const nomeLimpo = this.#nomeAtual.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'orcamento';
+    const blob = new Blob([this.#htmlAtual], { type: 'text/html;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `orcamento-efv-solar-${nomeLimpo}.html`;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 1200);
+  }
+
   async #compartilharWhatsApp() {
     if (!this.#htmlAtual) return;
 
-    // Monta o arquivo para compartilhamento nativo
+    /* Sempre baixa o arquivo primeiro */
+    this.#downloadSilencioso();
+
     const blob = new Blob([this.#htmlAtual], { type: 'text/html;charset=utf-8' });
     const file = new File([blob], 'orcamento-efv-solar.html', { type: 'text/html' });
 
-    // Web Share API com arquivo — abre painel nativo (Android / iOS) incluindo WhatsApp
+    /* Web Share API nativa (Android/iOS) — abre painel com WhatsApp */
     if (navigator.canShare?.({ files: [file] })) {
       try {
         await navigator.share({
@@ -837,25 +870,36 @@ class ShareController {
         });
         return;
       } catch (e) {
-        if (e.name === 'AbortError') return; // usuário cancelou — não faz nada
+        if (e.name === 'AbortError') return;
       }
     }
 
-    // Fallback (desktop / navegador sem Share API com arquivo):
-    // baixa o arquivo e abre WhatsApp com mensagem orientando o envio manual
-    this.#baixarPDF();
+    /* Fallback desktop: arquivo já baixado, abre WA com instrução de anexo */
     const msg = encodeURIComponent(
       `Orçamento EFV Solar — ${this.#nomeAtual}\n` +
       `Profissional: Lino M. DE AZEVEDO | (11) 97239-5317\n` +
-      `📎 Arquivo baixado — anexe no WhatsApp.`
+      `📎 Arquivo baixado automaticamente — anexe ao WhatsApp.`
     );
-    setTimeout(() => window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank', 'noopener'), 600);
+    setTimeout(() => window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank', 'noopener'), 900);
   }
 
   #compartilharEmail() {
+    if (!this.#htmlAtual) return;
+
+    /* Baixa o arquivo antes de abrir o cliente de e-mail */
+    this.#downloadSilencioso();
+
     const sub = encodeURIComponent(`Orçamento EFV Solar — ${this.#nomeAtual}`);
-    const bod = encodeURIComponent(this.#textoResumo());
-    window.location.href = `mailto:?subject=${sub}&body=${bod}`;
+    const bod = encodeURIComponent(
+      `Olá,\n\n` +
+      `Segue o orçamento de instalação fotovoltaica da EFV Solar.\n\n` +
+      `📎 O arquivo do orçamento foi baixado automaticamente no seu dispositivo — ` +
+      `por favor, anexe-o a este e-mail.\n\n` +
+      `Profissional: Lino M. DE AZEVEDO\n` +
+      `Telefone: (11) 97239-5317\n` +
+      `Instagram: @efvsolar_oficia`
+    );
+    setTimeout(() => { window.location.href = `mailto:?subject=${sub}&body=${bod}`; }, 900);
   }
 
   #compartilharTelegram() {
@@ -947,6 +991,7 @@ class EfvSolarApp {
     this.#financasCtrl    = new FinancasController();
     this.#calculadoraCtrl = new CalculadoraController();
     this.#shareCtrl       = new ShareController();
+    this.#orcamentosCtrl.setShareCtrl(this.#shareCtrl);
     this.#router          = new Router(tela => this.#aoNavegar(tela));
     this.#pwaCtrl         = new PwaInstallController();
     const canvas = document.getElementById('solar-canvas');
@@ -1054,11 +1099,8 @@ class EfvSolarApp {
       document.getElementById('orcamento-form').reset();
       this.#fecharSheet();
 
-      const win = window.open('', '_blank');
-      if (!win) { alert('Permita pop-ups para salvar o PDF.'); return; }
-      win.document.write(htmlPDF);
-      win.document.close();
-      win.addEventListener('load', () => setTimeout(() => win.print(), 400));
+      /* Abre modal de compartilhamento — download/WA/Email/Imprimir */
+      this.#shareCtrl.abrir(htmlPDF, nome);
     } finally {
       this.#setCarregando(false);
     }

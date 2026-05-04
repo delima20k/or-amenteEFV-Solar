@@ -380,6 +380,11 @@ body {
   color: var(--dark);
 }
 .btn-icon--pdf:hover { background: var(--gold); transform: scale(1.08); }
+.btn-icon--share {
+  background: rgba(37,211,102,0.12);
+  color: #25d366;
+}
+.btn-icon--share:hover { background: #25d366; color: var(--white); transform: scale(1.08); }
 .btn-icon--del {
   background: rgba(239,68,68,0.1);
   color: #ef4444;
