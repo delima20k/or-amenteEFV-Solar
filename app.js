@@ -1119,6 +1119,8 @@ class PrintBuilder {
   static #INSTAGRAM_URL  = 'https://www.instagram.com/efvsolar_oficia';
   static #PROFISSIONAL   = 'Lino M. DE AZEVEDO';
   static #TELEFONE       = '(11) 97239-5317';
+  static #EMPRESA_NOME   = 'EFV Solar';
+  static #EMPRESA_CNPJ   = '47.688.761/0001-41';
 
   static #INSTAGRAM_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
     fill="none" stroke="currentColor" stroke-width="2"
@@ -1422,10 +1424,27 @@ class PrintBuilder {
       padding-top: 12px;
       border-top: 2.5px solid var(--gold);
       display: flex;
+      flex-direction: column;
+      gap: 10px;
+      break-inside: avoid;
+    }
+    .rodape-empresa {
+      text-align: center;
+      font-size: 10pt;
+      font-weight: 700;
+      color: #111;
+      letter-spacing: 0.3px;
+    }
+    .rodape-empresa span {
+      font-weight: 400;
+      color: #555;
+      font-size: 9pt;
+    }
+    .rodape-linha {
+      display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 16px;
-      break-inside: avoid;
     }
     .instagram-link {
       display: flex;
@@ -1509,13 +1528,18 @@ class PrintBuilder {
     <main>${conteudo}</main>
 
     <footer class="rodape">
-      <a href="${PrintBuilder.#INSTAGRAM_URL}" class="instagram-link">
-        ${PrintBuilder.#INSTAGRAM_SVG}
-        @efvsolar_oficia
-      </a>
-      <div class="info-profissional">
-        <strong>Profissional:</strong> ${PrintBuilder.#PROFISSIONAL}<br>
-        <strong>Contato:</strong> ${PrintBuilder.#TELEFONE}
+      <div class="rodape-empresa">
+        ${PrintBuilder.#EMPRESA_NOME} <span>— CNPJ: ${PrintBuilder.#EMPRESA_CNPJ}</span>
+      </div>
+      <div class="rodape-linha">
+        <a href="${PrintBuilder.#INSTAGRAM_URL}" class="instagram-link">
+          ${PrintBuilder.#INSTAGRAM_SVG}
+          @efvsolar_oficia
+        </a>
+        <div class="info-profissional">
+          <strong>Profissional:</strong> ${PrintBuilder.#PROFISSIONAL}<br>
+          <strong>Contato:</strong> ${PrintBuilder.#TELEFONE}
+        </div>
       </div>
     </footer>
 
