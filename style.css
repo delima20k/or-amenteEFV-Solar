@@ -27,6 +27,40 @@
   padding: 0;
 }
 
+/* ===== PERFORMANCE & ANTI-ARTIFACTS ===== */
+* {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-drag: none;
+}
+
+body, div, span, h1, h2, h3, h4, h5, h6, p, label, svg, button, nav, section, header, footer, main {
+  user-select: none;
+  -webkit-user-select: none;
+}
+input, textarea, select {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+body { cursor: default; }
+h1, h2, h3, h4, h5, h6, p, span, label, div { cursor: default; }
+button, [role="button"] { cursor: pointer; }
+input, textarea, select { cursor: text; }
+
+img {
+  pointer-events: none;
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+*::selection { background: transparent; }
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  box-shadow: none !important;
+}
+
 /* ===== BASE ===== */
 html {
   scroll-behavior: smooth;
@@ -1091,8 +1125,7 @@ body {
   justify-content: center;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.3s ease;
-  backdrop-filter: blur(2px);
+  transition: opacity 0.2s ease;
 }
 @media (min-width: 520px) {
   .share-modal { align-items: center; }
@@ -1480,7 +1513,7 @@ body {
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background var(--transition), opacity var(--transition);
   white-space: nowrap;
 }
 
@@ -1725,7 +1758,6 @@ body {
   border-radius: 10px;
   cursor: pointer;
   transition: background .2s, box-shadow .2s, transform .15s;
-  backdrop-filter: blur(4px);
 }
 .home-btn-orcamento:hover {
   background: rgba(255,184,0,.15);
@@ -1818,7 +1850,6 @@ body {
   padding: 13px 32px;
   border-radius: 10px;
   cursor: pointer;
-  backdrop-filter: blur(4px);
   opacity: 0;
   transform: translateY(12px);
   transition: background .2s, box-shadow .2s,
@@ -1846,21 +1877,16 @@ body {
   background: rgba(0,0,0,0.65);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.35s ease;
-  backdrop-filter: blur(0px);
-  -webkit-backdrop-filter: blur(0px);
+  transition: opacity 0.25s ease;
 }
 body.sheet-open #sheet-backdrop {
   opacity: 1;
   pointer-events: auto;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
 }
 
-/* Canvas fica desfocado quando a sheet abre */
+/* Canvas escurece quando a sheet abre */
 body.sheet-open .home-canvas {
-  filter: blur(5px);
-  opacity: 0.35;
+  opacity: 0.25;
 }
 
 /* Canvas em modo lento (sheet fechada mas em slow motion) */
