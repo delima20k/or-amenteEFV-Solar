@@ -1824,6 +1824,13 @@ body.sheet-open .home-canvas {
   opacity: 0.35;
 }
 
+/* Canvas em modo lento (sheet fechada mas em slow motion) */
+.home-canvas--slow {
+  filter: blur(2px) brightness(0.7);
+  opacity: 0.45;
+  transition: filter 0.5s ease, opacity 0.5s ease;
+}
+
 /* Home permanece visível atrás da sheet */
 body.sheet-open #tela-home {
   display: block !important;

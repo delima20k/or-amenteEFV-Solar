@@ -910,12 +910,17 @@ class EfvSolarApp {
     /* Sheet: fechar ao clicar no backdrop */
     document.getElementById('sheet-backdrop')
       ?.addEventListener('click', () => this.#fecharSheet());
+
+    /* Home: reiniciar animação */
+    document.getElementById('btn-ver-animacao')
+      ?.addEventListener('click', () => this.#animacao?.reiniciar());
   }
 
   /* Abre a sheet: canvas dimma, formulário sobe como bottom sheet */
   #abrirSheet() {
     if (this.#sheetAberto) return;
     this.#sheetAberto = true;
+    this.#animacao?.pausar();
     document.body.classList.add('sheet-open');
     this.#router.navegar('formulario');
   }
@@ -927,6 +932,7 @@ class EfvSolarApp {
     setTimeout(() => {
       document.body.classList.remove('sheet-open', 'sheet-closing');
       this.#sheetAberto = false;
+      this.#animacao?.retomar();
       this.#router.navegar('home');
     }, 270);
   }

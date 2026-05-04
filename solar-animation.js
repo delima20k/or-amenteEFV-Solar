@@ -938,6 +938,7 @@ class AnimationController {
   #camera;
   #electricPanel;
   #windowGlow;
+  #slowMode = false;
 
   /**
    * Timeline: segundo em que cada fase COMEÇA
@@ -979,10 +980,11 @@ class AnimationController {
   }
 
   #loop(ts) {
-    const dt = this.#lastTs > 0
+    const rawDt = this.#lastTs > 0
       ? Math.min((ts - this.#lastTs) / 1000, 0.05)
       : 0;
     this.#lastTs  = ts;
+    const dt = this.#slowMode ? rawDt * 0.06 : rawDt;
     this.#elapsed += dt;
 
     this.#update(dt);
@@ -1052,8 +1054,16 @@ class AnimationController {
     this.#label.draw(isActive);
   }
 
+  /** Coloca em modo lento (sheet aberta — animação continua em background) */
+  pausar()   { this.#slowMode = true;  this.#canvas.classList.add('home-canvas--slow'); }
+
+  /** Retoma velocidade normal */
+  retomar()  { this.#slowMode = false; this.#canvas.classList.remove('home-canvas--slow'); }
+
   /** Reinicia a animação do zero */
   reiniciar() {
+    this.#slowMode = false;
+    this.#canvas.classList.remove('home-canvas--slow');
     this.#elapsed = 0;
     this.#lastTs  = 0;
     this.#panels.reset();
