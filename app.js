@@ -421,8 +421,9 @@ class CalculadoraController {
   #faturaPrev;
   #tarifaDisplay;
   #tarifaStatus;
-  #ultimoCalc = null;
-  #lightningTimer = null;
+  #ultimoCalc     = null;
+  #lightningTimers = new Map(); // timer por container — evita cancelamento cruzado
+  #rafPending      = false;     // batching de sync DOM no rAF
 
   constructor() {
     this.#slider          = document.getElementById('slider-consumo');
@@ -475,58 +476,69 @@ class CalculadoraController {
       this.#tarifaStatus.textContent = fonte === 'api' ? '✓ ao vivo' : fonte === 'cache' ? '⏱ cache' : '● fallback';
       this.#tarifaStatus.className   = 'calc-tarifa-status calc-tarifa-status--' + fonte;
     }
-    this.#atualizarPreviewFatura();
+    // #atualizarPreviewFatura já chamado acima — não repetir
+  }
+
+  /**
+   * Batching de DOM: agrupa todos os updates de slider num único rAF.
+   * Evita múltiplos reflows por frame quando o usuário arrasta rápido no mobile.
+   */
+  #scheduleSync() {
+    if (this.#rafPending) return;
+    this.#rafPending = true;
+    requestAnimationFrame(() => {
+      this.#rafPending = false;
+      this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
+      this.#syncSliderAnos();
+      this.#syncSliderPct();
+      this.#atualizarConta();
+      this.#atualizarPreviewFatura();
+    });
   }
 
   #bind() {
     this.#slider.addEventListener('input', () => {
-      this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
-      this.#atualizarConta();
-      this.#atualizarPreviewFatura();
+      this.#scheduleSync();
       this.#dispararRaios(this.#lightningConsumo);
     });
     this.#sliderAnos.addEventListener('input', () => {
-      this.#syncSliderAnos();
+      this.#scheduleSync();
       this.#dispararRaios(this.#lightningAnos);
     });
 
     this.#btnMenos.addEventListener('click', () => {
       this.#slider.value = Math.max(50, +this.#slider.value - 10);
-      this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
-      this.#atualizarConta();
-      this.#atualizarPreviewFatura();
+      this.#scheduleSync();
       this.#dispararRaios(this.#lightningConsumo);
     });
     this.#btnMais.addEventListener('click', () => {
       this.#slider.value = Math.min(2000, +this.#slider.value + 10);
-      this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
-      this.#atualizarConta();
-      this.#atualizarPreviewFatura();
+      this.#scheduleSync();
       this.#dispararRaios(this.#lightningConsumo);
     });
     this.#btnAnosMenos.addEventListener('click', () => {
       this.#sliderAnos.value = Math.max(1, +this.#sliderAnos.value - 1);
-      this.#syncSliderAnos();
+      this.#scheduleSync();
       this.#dispararRaios(this.#lightningAnos);
     });
     this.#btnAnosMais.addEventListener('click', () => {
       this.#sliderAnos.value = Math.min(40, +this.#sliderAnos.value + 1);
-      this.#syncSliderAnos();
+      this.#scheduleSync();
       this.#dispararRaios(this.#lightningAnos);
     });
 
     this.#sliderPct.addEventListener('input', () => {
-      this.#syncSliderPct();
+      this.#scheduleSync();
       this.#dispararRaios(this.#lightningPct);
     });
     this.#btnPctMenos.addEventListener('click', () => {
       this.#sliderPct.value = Math.max(1, +this.#sliderPct.value - 1);
-      this.#syncSliderPct();
+      this.#scheduleSync();
       this.#dispararRaios(this.#lightningPct);
     });
     this.#btnPctMais.addEventListener('click', () => {
       this.#sliderPct.value = Math.min(15, +this.#sliderPct.value + 1);
-      this.#syncSliderPct();
+      this.#scheduleSync();
       this.#dispararRaios(this.#lightningPct);
     });
 
@@ -578,7 +590,8 @@ class CalculadoraController {
 
   #dispararRaios(container) {
     if (!container) return;
-    clearTimeout(this.#lightningTimer);
+    /* Timer por container — cancela apenas o próprio, não o de outros containers */
+    clearTimeout(this.#lightningTimers.get(container));
     container.innerHTML = '';
     const n = Math.floor(Math.random() * 3) + 2;
     for (let i = 0; i < n; i++) {
@@ -589,10 +602,11 @@ class CalculadoraController {
       container.appendChild(bolt);
     }
     container.classList.add('active');
-    this.#lightningTimer = setTimeout(() => {
+    this.#lightningTimers.set(container, setTimeout(() => {
       container.classList.remove('active');
       container.innerHTML = '';
-    }, 700);
+      this.#lightningTimers.delete(container);
+    }, 700));
   }
 
   #calcular() {
