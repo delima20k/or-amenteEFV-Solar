@@ -776,8 +776,9 @@ class InverterAnimation {
    ============================================================ */
 class PanelAnimation {
   #ctx; #scene;
-  #panels = [];
-  #snapped = new Set();   // IDs de painéis que já tocaram som
+  #panels     = [];
+  #snapped    = new Set();   // IDs de painéis que já tocaram som
+  #panelGrads = [];          // gradientes cacheados por idx (criados após encaixe)
 
   static #COLS = 3;
   static #ROWS = 2;
@@ -837,6 +838,7 @@ class PanelAnimation {
 
   reset() {
     this.#snapped.clear();
+    this.#panelGrads = [];
     for (const p of this.#panels) { p.drop = 0; p.energy = 0; }
   }
 
@@ -848,11 +850,11 @@ class PanelAnimation {
       const startOff = -280 - p.idx * 15;
       const offsetY  = GeometryUtils.lerp(startOff, 0, bounced);
       const pts      = p.corners.map(pt => ({ x: pt.x, y: pt.y + offsetY }));
-      this.#drawPanel(pts, p.energy, p.drop >= 1);
+      this.#drawPanel(pts, p.energy, p.drop >= 1, p.idx);
     }
   }
 
-  #drawPanel(pts, energy, settled) {
+  #drawPanel(pts, energy, settled, idx) {
     const ctx = this.#ctx;
     ctx.save();
 
@@ -865,12 +867,16 @@ class PanelAnimation {
       ctx.fill();
     }
 
-    /* Corpo do painel */
+    /* Corpo do painel — gradiente cacheado após encaixe */
     const [tl, tr, br, bl] = pts;
-    const grad = ctx.createLinearGradient(tl.x, tl.y, br.x, br.y);
-    grad.addColorStop(0,   '#0b2240');
-    grad.addColorStop(0.5, '#153860');
-    grad.addColorStop(1,   '#0b2240');
+    let grad = this.#panelGrads[idx];
+    if (!grad) {
+      grad = ctx.createLinearGradient(tl.x, tl.y, br.x, br.y);
+      grad.addColorStop(0,   '#0b2240');
+      grad.addColorStop(0.5, '#153860');
+      grad.addColorStop(1,   '#0b2240');
+      if (settled) this.#panelGrads[idx] = grad; // cacheia só quando coords são fixas
+    }
     ctx.fillStyle = grad;
     ctx.beginPath();
     pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
@@ -968,6 +974,7 @@ class EnergyFlowAnimation {
   #time     = 0;
   #path     = null;
   #totalLen = 0;
+  #segLens  = [];   // comprimentos pré-computados de cada segmento do caminho
 
   constructor(ctx, scene, w, h) {
     this.#ctx   = ctx;
@@ -989,6 +996,13 @@ class EnergyFlowAnimation {
       { x: w * 0.50,  y: h * 0.655 },
     ];
     this.#totalLen = this.#calcLen(this.#path.length - 1);
+    /* Cache dos comprimentos para evitar sqrt repetidos em #pointAt */
+    this.#segLens = [];
+    for (let i = 1; i < this.#path.length; i++) {
+      const dx = this.#path[i].x - this.#path[i - 1].x;
+      const dy = this.#path[i].y - this.#path[i - 1].y;
+      this.#segLens.push(Math.sqrt(dx * dx + dy * dy));
+    }
   }
 
   #calcLen(upToIdx) {
@@ -1006,7 +1020,7 @@ class EnergyFlowAnimation {
     for (let i = 1; i < this.#path.length; i++) {
       const dx  = this.#path[i].x - this.#path[i - 1].x;
       const dy  = this.#path[i].y - this.#path[i - 1].y;
-      const seg = Math.sqrt(dx * dx + dy * dy);
+      const seg = this.#segLens[i - 1]; // usa cache — evita Math.sqrt por partícula
       if (target <= seg) {
         const t = seg > 0 ? target / seg : 0;
         return { x: this.#path[i - 1].x + dx * t, y: this.#path[i - 1].y + dy * t };
@@ -1225,8 +1239,9 @@ class ElectricalPanelAnimation {
    ============================================================ */
 class WindowGlowAnimation {
   #ctx; #w; #h;
-  #progress = 0;
-  #time     = 0;
+  #progress  = 0;
+  #time      = 0;
+  #glowGrads = null; // gradientes radiais cacheados (criados no primeiro draw)
 
   static #WINDOWS = [
     { ux: 0.37, uy: 0.52, uw: 0.10, uh: 0.09 },
@@ -1237,13 +1252,16 @@ class WindowGlowAnimation {
 
   update(t)  { this.#progress = t; }
   tick(dt)   { this.#time += dt; }
-  reset()    { this.#progress = 0; this.#time = 0; }
+  reset()    { this.#progress = 0; this.#time = 0; this.#glowGrads = null; }
 
   draw() {
     if (this.#progress <= 0) return;
     const ctx = this.#ctx, w = this.#w, h = this.#h;
-    const t   = EasingFunctions.outCubic(this.#progress);
+    const t     = EasingFunctions.outCubic(this.#progress);
     const pulse = 0.82 + 0.18 * Math.sin(this.#time * 3.2);
+
+    /* Inicializa gradientes na primeira chamada — evita recriar a cada frame */
+    if (!this.#glowGrads) this.#initGlowGrads();
 
     for (const [i, win] of WindowGlowAnimation.#WINDOWS.entries()) {
       const delay = i * 0.28;
@@ -1254,26 +1272,35 @@ class WindowGlowAnimation {
 
       const wx = w * win.ux, wy = h * win.uy;
       const ww = w * win.uw, wh = h * win.uh;
-      const alpha = wt * pulse;
 
       ctx.save();
+      /* globalAlpha = wt * pulse multiplica os stop-alphas do gradiente cacheado
+         (0.70 e 0.12), replicando exatamente o comportamento original. */
+      ctx.globalAlpha = wt * pulse;
       ctx.shadowBlur  = 22 * wt;
       ctx.shadowColor = 'rgba(255,195,50,0.85)';
+      ctx.fillStyle   = this.#glowGrads[i];
+      ctx.fillRect(wx, wy, ww, wh);
+      /* Halo externo */
+      ctx.fillStyle = 'rgba(255,185,40,0.10)';
+      ctx.fillRect(wx - 10, wy - 10, ww + 20, wh + 20);
+      ctx.restore();
+    }
+  }
 
+  #initGlowGrads() {
+    const ctx = this.#ctx, w = this.#w, h = this.#h;
+    this.#glowGrads = WindowGlowAnimation.#WINDOWS.map(win => {
+      const wx = w * win.ux, wy = h * win.uy;
+      const ww = w * win.uw, wh = h * win.uh;
       const grd = ctx.createRadialGradient(
         wx + ww / 2, wy + wh / 2, 0,
         wx + ww / 2, wy + wh / 2, Math.max(ww, wh)
       );
-      grd.addColorStop(0, `rgba(255,225,80,${alpha * 0.70})`);
-      grd.addColorStop(1, `rgba(255,150,20,${alpha * 0.12})`);
-      ctx.fillStyle = grd;
-      ctx.fillRect(wx, wy, ww, wh);
-
-      /* Halo externo */
-      ctx.fillStyle = `rgba(255,185,40,${alpha * 0.10})`;
-      ctx.fillRect(wx - 10, wy - 10, ww + 20, wh + 20);
-      ctx.restore();
-    }
+      grd.addColorStop(0, 'rgba(255,225,80,0.70)');
+      grd.addColorStop(1, 'rgba(255,150,20,0.12)');
+      return grd;
+    });
   }
 }
 
@@ -1283,9 +1310,12 @@ class WindowGlowAnimation {
 class AnimationController {
   #canvas; #ctx;
   #w = 0; #h = 0;
-  #elapsed = 0;
-  #lastTs  = 0;
-  #rafId   = null;
+  #elapsed      = 0;
+  #lastTs       = 0;
+  #rafId        = null;
+  #bgCanvas     = null;   // canvas offscreen com cenário estático pré-renderizado
+  #drawThrottle = 0;      // acumulador para throttle de fps pós-conclusão
+  #frozen       = false;  // true quando animação terminou — canvas vira imagem estática
 
   #scene;
   #structure;
@@ -1336,6 +1366,19 @@ class AnimationController {
     this.#camera        = new CameraController(w, h);
     this.#electricPanel = new ElectricalPanelAnimation(ctx, w, h);
     this.#windowGlow    = new WindowGlowAnimation(ctx, w, h);
+
+    /* Pré-renderiza o cenário estático (casa, céu, grama) em canvas offscreen.
+       Evita redesenhar ~150 operações imutáveis a 60 fps.
+       Resolução = dpr × bgZoom para manter nitidez durante o zoom de câmera. */
+    const dpr    = window.devicePixelRatio || 1;
+    const bgZoom = 1.68; // = CameraController.#ZOOM_MAX
+    const bg     = document.createElement('canvas');
+    bg.width     = Math.round(w * dpr * bgZoom);
+    bg.height    = Math.round(h * dpr * bgZoom);
+    const bgCtx  = bg.getContext('2d');
+    bgCtx.scale(dpr * bgZoom, dpr * bgZoom);
+    new RoofScene(bgCtx, w, h).draw();
+    this.#bgCanvas = bg;
   }
 
   #loop(ts) {
@@ -1347,7 +1390,23 @@ class AnimationController {
     this.#elapsed += dt;
 
     this.#update(dt);
-    this.#draw();
+
+    /* Limita todo o redraw da animação a 20 fps — libera CPU para o resto do app */
+    const THROTTLE_MS = 1000 / 20; // 50 ms
+    this.#drawThrottle += rawDt * 1000;
+    if (this.#drawThrottle >= THROTTLE_MS) {
+      this.#drawThrottle -= THROTTLE_MS;
+      this.#draw();
+    }
+
+    /* Auto-congelar quando todas as fases concluem — canvas vira imagem estática */
+    const COMPLETE_S = AnimationController.#TL.p9 + AnimationController.#DU.p9;
+    if (this.#elapsed >= COMPLETE_S) {
+      this.#draw(); // garante o frame final antes de parar
+      this.#_freeze();
+      return;       // não agenda próximo RAF
+    }
+
     this.#rafId = requestAnimationFrame(t => this.#loop(t));
   }
 
@@ -1396,7 +1455,7 @@ class AnimationController {
     ctx.save();
     this.#camera.applyTransform(ctx);
 
-    this.#scene.draw();
+    ctx.drawImage(this.#bgCanvas, 0, 0, this.#w, this.#h);
     this.#structure.draw();
     this.#cables.draw();
     this.#inverter.draw();
@@ -1413,15 +1472,42 @@ class AnimationController {
     this.#label.draw(isActive);
   }
 
+  /** Congela o RAF e marca canvas como imagem estática (uso interno e público) */
+  #_freeze() {
+    if (this.#rafId !== null) {
+      cancelAnimationFrame(this.#rafId);
+      this.#rafId = null;
+    }
+    this.#slowMode = false;
+    this.#canvas.classList.remove('home-canvas--slow');
+    this.#frozen = true;
+  }
+
+  /**
+   * Se a animação ainda estiver rodando, avança para o estado final,
+   * renderiza o frame de conclusão e para todos os loops.
+   * Se já congelada, não faz nada.
+   */
+  congelarImediato() {
+    if (this.#frozen) return;
+    const COMPLETE_S = AnimationController.#TL.p9 + AnimationController.#DU.p9;
+    this.#elapsed = COMPLETE_S + 0.01;
+    this.#update(0);
+    this.#draw();
+    this.#_freeze();
+  }
+
   /** Coloca em modo lento (sheet aberta — animação continua em background) */
-  pausar()   { this.#slowMode = true;  this.#canvas.classList.add('home-canvas--slow'); }
+  pausar()   { if (this.#frozen) return; this.#slowMode = true;  this.#canvas.classList.add('home-canvas--slow'); }
 
   /** Retoma velocidade normal */
   retomar()  { this.#slowMode = false; this.#canvas.classList.remove('home-canvas--slow'); }
 
   /** Reinicia a animação do zero */
   reiniciar() {
-    this.#slowMode = false;
+    this.#frozen      = false;
+    this.#slowMode    = false;
+    this.#drawThrottle = 0;
     this.#canvas.classList.remove('home-canvas--slow');
     this.#elapsed = 0;
     this.#lastTs  = 0;
@@ -1443,9 +1529,9 @@ class AnimationController {
     this.#canvas.classList.remove('home-canvas--slow');
   }
 
-  /** Retoma o loop RAF (voltou para a home) */
+  /** Retoma o loop RAF (voltou para a home) — não faz nada se já congelada */
   iniciar() {
-    if (this.#rafId !== null) return;
+    if (this.#frozen || this.#rafId !== null) return;
     this.#lastTs = 0;
     this.#rafId = requestAnimationFrame(t => this.#loop(t));
   }

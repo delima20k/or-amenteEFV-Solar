@@ -1008,11 +1008,12 @@ class EfvSolarApp {
       document.body.classList.remove('sheet-open', 'sheet-closing');
       this.#sheetAberto = false;
     }
-    /* Parar RAF ao sair da home; retomar ao voltar */
+    /* Ao sair da home: congela no estado final (para todos os loops).
+       Ao voltar para home: se já congelada mostra a imagem estática; se não, retoma. */
     if (tela === 'home') {
       this.#animacao?.iniciar();
     } else {
-      this.#animacao?.parar();
+      this.#animacao?.congelarImediato();
     }
     if (tela === 'orcamentos') this.#orcamentosCtrl.render();
     if (tela === 'financas')   this.#financasCtrl.render();
@@ -1040,9 +1041,7 @@ class EfvSolarApp {
     document.getElementById('sheet-backdrop')
       ?.addEventListener('click', () => this.#fecharSheet());
 
-    /* Home: reiniciar animação */
-    document.getElementById('btn-ver-animacao')
-      ?.addEventListener('click', () => this.#animacao?.reiniciar());
+    /* btn-ver-animacao existe no HTML mas não reinicia mais a animação */
   }
 
   /* Abre a sheet: canvas dimma, formulário sobe como bottom sheet */
