@@ -1139,7 +1139,7 @@ class EfvSolarApp {
       /* Gera HTML (para Imprimir) e PDF real (para Download/WhatsApp) em paralelo */
       const [htmlPDF, pdfBlob] = await Promise.all([
         Promise.resolve(PrintBuilder.build(dados, this.#logoBase64)),
-        PdfBuilder.build(dados, this.#logoBase64).catch(() => null), // nunca bloqueia
+        PdfBuilder.build(dados, this.#logoBase64).catch(err => { console.error('[PdfBuilder] falha ao gerar PDF:', err); return null; }),
       ]);
 
       document.getElementById('orcamento-form').reset();
@@ -1182,8 +1182,10 @@ class PdfBuilder {
    * @returns {Promise<Blob>}
    */
   static async build(dados, logoBase64) {
+    if (!window.jspdf?.jsPDF) throw new Error('jsPDF não carregado — verifique os scripts no index.html');
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    if (typeof doc.autoTable !== 'function') throw new Error('jsPDF-AutoTable não carregado — verifique a ordem dos scripts');
 
     const W    = doc.internal.pageSize.getWidth();
     const H    = doc.internal.pageSize.getHeight();
@@ -1196,11 +1198,15 @@ class PdfBuilder {
 
     /* ---- MARCA D'ÁGUA ---- */
     if (logoBase64) {
-      doc.saveGraphicsState();
-      doc.setGState(new doc.GState({ opacity: 0.07 }));
-      const mwSize = 90;
-      doc.addImage(logoBase64, 'PNG', (W - mwSize) / 2, (H - mwSize) / 2, mwSize, mwSize);
-      doc.restoreGraphicsState();
+      try {
+        doc.saveGraphicsState();
+        doc.setGState(new doc.GState({ opacity: 0.07 }));
+        const mwSize = 90;
+        doc.addImage(logoBase64, 'PNG', (W - mwSize) / 2, (H - mwSize) / 2, mwSize, mwSize);
+        doc.restoreGraphicsState();
+      } catch {
+        /* GState não suportado neste ambiente — ignora marca d'água */
+      }
     }
 
     /* ---- CABEÇALHO ---- */
