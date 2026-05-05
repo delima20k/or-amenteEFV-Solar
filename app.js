@@ -14,6 +14,7 @@ const FIELDS = [
   { id: 'economia',        label: 'Economia',            section: 'financeiro'    },
   { id: 'economia_mensal', label: 'Economia Mensal',     section: 'financeiro'    },
   { id: 'economia_anual',  label: 'Economia Anual',      section: 'financeiro'    },
+  { id: 'valor_orcamento', label: 'Valor do Orçamento',   section: 'financeiro'    },
   { id: 'investimento',    label: 'Investimento',        section: 'financeiro'    },
   { id: 'economia_30',     label: 'Economia no Período',  section: 'financeiro'    },
   { id: 'periodo_anos',    label: 'Período de Economia',  section: 'financeiro'    },
