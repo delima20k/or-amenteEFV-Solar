@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'efv-solar-v19';
+const CACHE_NAME = 'efv-solar-v20';
 
 const ASSETS_PARA_CACHE = [
   './',
@@ -13,6 +13,8 @@ const ASSETS_PARA_CACHE = [
   './assets/efv_solar_logo.png',
   './assets/icon.svg',
   './assets/three.min.js',
+  './assets/jspdf.umd.min.js',
+  './assets/jspdf.plugin.autotable.min.js',
 ];
 
 /* Instala o SW e pré-armazena os assets */

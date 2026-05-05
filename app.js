@@ -809,6 +809,7 @@ class ShareController {
   #btnDownload;
   #htmlAtual = null;
   #nomeAtual = '';
+  #pdfBlob   = null; // Blob .pdf gerado pelo PdfBuilder (download e share nativos)
 
   constructor() {
     this.#modal      = document.getElementById('share-modal');
@@ -833,9 +834,10 @@ class ShareController {
     this.#btnDownload?.addEventListener('click', () => this.#baixarPDF());
   }
 
-  abrir(htmlPDF, nome) {
+  abrir(htmlPDF, nome, pdfBlob = null) {
     this.#htmlAtual = htmlPDF;
     this.#nomeAtual = nome || 'Orçamento EFV Solar';
+    this.#pdfBlob   = pdfBlob ?? null;
     this.#modal.setAttribute('aria-hidden', 'false');
     this.#modal.classList.add('is-open');
     this.#btnClose.focus();
@@ -850,29 +852,28 @@ class ShareController {
     return `Orçamento EFV Solar — ${this.#nomeAtual}\nProfissional: Lino M. DE AZEVEDO | (11) 97239-5317\nhttps://www.instagram.com/efvsolar_oficia`;
   }
 
-  /* Baixa o orçamento como arquivo HTML silenciosamente (sem popup) */
+  /* Baixa o HTML silenciosamente — usado como fallback no e-mail */
   #downloadSilencioso() {
     if (!this.#htmlAtual) return;
     const nomeLimpo = this.#nomeAtual.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'orcamento';
-    const blob = new Blob([this.#htmlAtual], { type: 'text/html;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `orcamento-efv-solar-${nomeLimpo}.html`;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 1200);
+    this.#downloadBlob(
+      new Blob([this.#htmlAtual], { type: 'text/html;charset=utf-8' }),
+      `orcamento-efv-solar-${nomeLimpo}.html`
+    );
   }
 
   async #compartilharWhatsApp() {
     if (!this.#htmlAtual) return;
+    const nomeLimpo = this.#nomeAtual.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'orcamento';
 
-    /* Sempre baixa o arquivo primeiro */
-    this.#downloadSilencioso();
+    /* Usa o PDF real se disponível, senão usa HTML */
+    const blob = this.#pdfBlob ?? new Blob([this.#htmlAtual], { type: 'text/html;charset=utf-8' });
+    const ext  = this.#pdfBlob ? 'pdf' : 'html';
+    const mime = this.#pdfBlob ? 'application/pdf' : 'text/html';
+    const file = new File([blob], `orcamento-efv-solar-${nomeLimpo}.${ext}`, { type: mime });
 
-    const blob = new Blob([this.#htmlAtual], { type: 'text/html;charset=utf-8' });
-    const file = new File([blob], 'orcamento-efv-solar.html', { type: 'text/html' });
+    /* Baixa silenciosamente antes de abrir o share */
+    this.#downloadBlob(blob, `orcamento-efv-solar-${nomeLimpo}.${ext}`);
 
     /* Web Share API nativa (Android/iOS) — abre painel com WhatsApp */
     if (navigator.canShare?.({ files: [file] })) {
@@ -900,8 +901,13 @@ class ShareController {
   #compartilharEmail() {
     if (!this.#htmlAtual) return;
 
-    /* Baixa o arquivo antes de abrir o cliente de e-mail */
-    this.#downloadSilencioso();
+    /* Baixa o arquivo (PDF se disponível, senão HTML) antes de abrir o cliente de e-mail */
+    const nomeLimpo = this.#nomeAtual.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'orcamento';
+    if (this.#pdfBlob) {
+      this.#downloadBlob(this.#pdfBlob, `orcamento-efv-solar-${nomeLimpo}.pdf`);
+    } else {
+      this.#downloadSilencioso();
+    }
 
     const sub = encodeURIComponent(`Orçamento EFV Solar — ${this.#nomeAtual}`);
     const bod = encodeURIComponent(
@@ -931,13 +937,31 @@ class ShareController {
   }
 
   #baixarPDF() {
-    /* Usa o dialogo de impressão nativo para salvar como PDF — funciona offline */
+    /* Se temos um Blob .pdf real: download direto sem popup */
+    if (this.#pdfBlob) {
+      const nomeLimpo = this.#nomeAtual.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'orcamento';
+      this.#downloadBlob(this.#pdfBlob, `orcamento-efv-solar-${nomeLimpo}.pdf`);
+      return;
+    }
+    /* Fallback: impressão via HTML (caso jsPDF não esteja disponível) */
     if (!this.#htmlAtual) return;
     const win = window.open('', '_blank');
     if (!win) { alert('Permita pop-ups para salvar o PDF.'); return; }
     win.document.write(this.#htmlAtual);
     win.document.close();
     win.addEventListener('load', () => setTimeout(() => win.print(), 400));
+  }
+
+  /** Download genérico de Blob — cria link, clica, revoga URL */
+  #downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a   = document.createElement('a');
+    a.href     = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 1500);
   }
 }
 
@@ -1112,12 +1136,17 @@ class EfvSolarApp {
 
       OrcamentoStorage.salvar(registro);
 
-      const htmlPDF = PrintBuilder.build(dados, this.#logoBase64);
+      /* Gera HTML (para Imprimir) e PDF real (para Download/WhatsApp) em paralelo */
+      const [htmlPDF, pdfBlob] = await Promise.all([
+        Promise.resolve(PrintBuilder.build(dados, this.#logoBase64)),
+        PdfBuilder.build(dados, this.#logoBase64).catch(() => null), // nunca bloqueia
+      ]);
+
       document.getElementById('orcamento-form').reset();
       this.#fecharSheet();
 
-      /* Abre modal de compartilhamento — download/WA/Email/Imprimir */
-      this.#shareCtrl.abrir(htmlPDF, nome);
+      /* Abre modal de compartilhamento — passa pdfBlob para download real */
+      this.#shareCtrl.abrir(htmlPDF, nome, pdfBlob);
     } finally {
       this.#setCarregando(false);
     }
@@ -1128,6 +1157,136 @@ class EfvSolarApp {
       try { await navigator.serviceWorker.register('./sw.js'); }
       catch { /* SW não crítico */ }
     }
+  }
+}
+
+/* ===================================================
+   PDF BUILDER — gera Blob .pdf com jsPDF (sem popup)
+   =================================================== */
+class PdfBuilder {
+  static #PROFISSIONAL = 'Lino M. DE AZEVEDO';
+  static #TELEFONE     = '(11) 97239-5317';
+  static #EMPRESA_NOME = 'EFV Solar';
+  static #EMPRESA_CNPJ = '47.688.761/0001-41';
+
+  /* Cor dourada padrão da marca */
+  static #GOLD  = [255, 184, 0];
+  static #DARK  = [17,  24, 39];
+  static #GRAY  = [107, 114, 128];
+  static #WHITE = [255, 255, 255];
+
+  /**
+   * Gera o PDF na memória e retorna um Blob application/pdf.
+   * @param {Array<{label,value,section}>} dados
+   * @param {string|null} logoBase64
+   * @returns {Promise<Blob>}
+   */
+  static async build(dados, logoBase64) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+    const W    = doc.internal.pageSize.getWidth();
+    const H    = doc.internal.pageSize.getHeight();
+    const ML   = 14; // margem esquerda
+    const MR   = 14; // margem direita
+    const CW   = W - ML - MR;
+    const date = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    let y = 14; // cursor vertical
+
+    /* ---- MARCA D'ÁGUA ---- */
+    if (logoBase64) {
+      doc.saveGraphicsState();
+      doc.setGState(new doc.GState({ opacity: 0.07 }));
+      const mwSize = 90;
+      doc.addImage(logoBase64, 'PNG', (W - mwSize) / 2, (H - mwSize) / 2, mwSize, mwSize);
+      doc.restoreGraphicsState();
+    }
+
+    /* ---- CABEÇALHO ---- */
+    const LOGO_SIZE = 18;
+    if (logoBase64) {
+      doc.addImage(logoBase64, 'PNG', ML, y, LOGO_SIZE, LOGO_SIZE);
+    }
+    const textX = ML + (logoBase64 ? LOGO_SIZE + 5 : 0);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.setTextColor(...PdfBuilder.#GOLD);
+    doc.text(PdfBuilder.#EMPRESA_NOME.toUpperCase(), textX, y + 6);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...PdfBuilder.#GRAY);
+    doc.text('ORÇAMENTO DE INSTALAÇÃO FOTOVOLTAICA', textX, y + 11);
+    doc.text(date, textX, y + 15);
+
+    y += LOGO_SIZE + 4;
+
+    /* Linha dourada separadora */
+    doc.setDrawColor(...PdfBuilder.#GOLD);
+    doc.setLineWidth(0.8);
+    doc.line(ML, y, ML + CW, y);
+    y += 6;
+
+    /* ---- SEÇÕES ---- */
+    const agrupado = dados.reduce((acc, item) => {
+      (acc[item.section] ??= []).push(item);
+      return acc;
+    }, {});
+
+    for (const [secao, itens] of Object.entries(agrupado)) {
+      const titulo = SECTIONS[secao] ?? secao;
+
+      /* Verifica se há espaço suficiente (pelo menos 30mm) */
+      if (y + 30 > H - 20) {
+        doc.addPage();
+        y = 14;
+      }
+
+      doc.autoTable({
+        startY: y,
+        margin: { left: ML, right: MR },
+        head: [[{ content: titulo.toUpperCase(), colSpan: 2 }]],
+        body: itens.map(({ label, value }) => [label, value || '—']),
+        headStyles: {
+          fillColor: PdfBuilder.#DARK,
+          textColor: PdfBuilder.#GOLD,
+          fontStyle: 'bold',
+          fontSize: 8,
+          cellPadding: { top: 4, bottom: 4, left: 5, right: 5 },
+        },
+        bodyStyles: {
+          fontSize: 9.5,
+          cellPadding: { top: 3.5, bottom: 3.5, left: 5, right: 5 },
+          textColor: [30, 30, 30],
+        },
+        alternateRowStyles: { fillColor: [247, 248, 249] },
+        columnStyles: {
+          0: { fontStyle: 'bold', textColor: PdfBuilder.#DARK, cellWidth: CW * 0.42 },
+          1: { cellWidth: CW * 0.58 },
+        },
+        theme: 'grid',
+        tableLineColor: [229, 231, 235],
+        tableLineWidth: 0.2,
+      });
+
+      y = doc.lastAutoTable.finalY + 5;
+    }
+
+    /* ---- RODAPÉ ---- */
+    const footerY = H - 12;
+    doc.setDrawColor(...PdfBuilder.#GOLD);
+    doc.setLineWidth(0.4);
+    doc.line(ML, footerY - 3, ML + CW, footerY - 3);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...PdfBuilder.#GRAY);
+    const footerTxt = `${PdfBuilder.#PROFISSIONAL}  •  ${PdfBuilder.#TELEFONE}  •  CNPJ ${PdfBuilder.#EMPRESA_CNPJ}`;
+    doc.text(footerTxt, W / 2, footerY, { align: 'center' });
+
+    return doc.output('blob');
   }
 }
 
