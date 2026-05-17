@@ -3,13 +3,37 @@
 /* ===== CONSTANTES DE DOMÍNIO ===== */
 const FIELDS = [
   { id: 'nome',            label: 'Nome do Cliente',     section: 'cliente'       },
-  { id: 'endereco',        label: 'Endereço do Cliente', section: 'cliente'       },
-  { id: 'contato',         label: 'Contato do Cliente',  section: 'cliente'       },
-  { id: 'qtd_placas',      label: 'Quantidade de Placas',section: 'equipamentos'  },
-  { id: 'inversor',        label: 'Inversor',            section: 'equipamentos'  },
-  { id: 'estrutura',       label: 'Estrutura',           section: 'equipamentos'  },
-  { id: 'cabo_preto',      label: 'Cabo CC Preto',       section: 'equipamentos'  },
-  { id: 'cabo_vermelho',   label: 'Cabo CC Vermelho',    section: 'equipamentos'  },
+  { id: 'endereco',        label: 'Endereço',            section: 'cliente'       },
+  { id: 'contato',         label: 'Contato',             section: 'cliente'       },
+  { id: 'cidade',          label: 'Cidade',              section: 'cliente'       },
+  { id: 'estado',          label: 'Estado',              section: 'cliente'       },
+  { id: 'placas_marca',                 label: 'Placas Solares - Marca',            section: 'equipamentos'  },
+  { id: 'placas_potencia',              label: 'Placas Solares - Potência (W)',     section: 'equipamentos'  },
+  { id: 'placas_largura',               label: 'Placas Solares - Largura (cm)',     section: 'equipamentos'  },
+  { id: 'placas_comprimento',           label: 'Placas Solares - Comprimento (cm)', section: 'equipamentos'  },
+  { id: 'placas_quantidade',            label: 'Placas Solares - Quantidade',       section: 'equipamentos'  },
+  { id: 'placas_peso',                  label: 'Placas Solares - Peso (kg)',        section: 'equipamentos'  },
+  { id: 'placas_fornecedor',            label: 'Placas Solares - Fornecedor',       section: 'equipamentos'  },
+  { id: 'inversores_marca',             label: 'Inversores - Marca',                section: 'equipamentos'  },
+  { id: 'inversores_potencia',          label: 'Inversores - Potência',             section: 'equipamentos'  },
+  { id: 'inversores_quantidade',        label: 'Inversores - Quantidade',           section: 'equipamentos'  },
+  { id: 'inversores_peso',              label: 'Inversores - Peso',                 section: 'equipamentos'  },
+  { id: 'inversores_fornecedor',        label: 'Inversores - Fornecedor',           section: 'equipamentos'  },
+  { id: 'microinversores_marca',        label: 'Microinversores - Marca',           section: 'equipamentos'  },
+  { id: 'microinversores_potencia',     label: 'Microinversores - Potência',        section: 'equipamentos'  },
+  { id: 'microinversores_quantidade',   label: 'Microinversores - Quantidade',      section: 'equipamentos'  },
+  { id: 'microinversores_peso',         label: 'Microinversores - Peso',            section: 'equipamentos'  },
+  { id: 'microinversores_fornecedor',   label: 'Microinversores - Fornecedor',      section: 'equipamentos'  },
+  { id: 'estrutura_modelo',              label: 'Estrutura - Modelo',                section: 'equipamentos'  },
+  { id: 'estrutura_quantidade',          label: 'Estrutura - Quantidade',            section: 'equipamentos'  },
+  { id: 'estrutura_peso',                label: 'Estrutura - Peso',                  section: 'equipamentos'  },
+  { id: 'estrutura_largura',             label: 'Estrutura - Largura',               section: 'equipamentos'  },
+  { id: 'estrutura_comprimento',         label: 'Estrutura - Comprimento',           section: 'equipamentos'  },
+  { id: 'cabo_preto_metros',             label: 'Cabos - Cabo Preto (m)',            section: 'equipamentos'  },
+  { id: 'cabo_vermelho_metros',          label: 'Cabos - Cabo Vermelho (m)',         section: 'equipamentos'  },
+  { id: 'quantidade_total_itens',        label: 'Quantidade Total de Itens',         section: 'equipamentos'  },
+  { id: 'tipo_unidade_consumidora',      label: 'Tipo de Unidade Consumidora',       section: 'financeiro'    },
+  { id: 'quantidade_unidades',           label: 'Quantidade de Unidades',            section: 'financeiro'    },
   { id: 'inflacao',        label: 'Inflação Anual',      section: 'financeiro'    },
   { id: 'economia',        label: 'Economia',            section: 'financeiro'    },
   { id: 'economia_mensal', label: 'Economia Mensal',     section: 'financeiro'    },
@@ -18,6 +42,9 @@ const FIELDS = [
   { id: 'investimento',    label: 'Investimento',        section: 'financeiro'    },
   { id: 'economia_30',     label: 'Economia no Período',  section: 'financeiro'    },
   { id: 'periodo_anos',    label: 'Período de Economia',  section: 'financeiro'    },
+  { id: 'garantia_placas',     label: 'Garantia das placas',      section: 'financeiro'    },
+  { id: 'garantia_inversores', label: 'Garantia dos inversores',  section: 'financeiro'    },
+  { id: 'garantia_instalacao', label: 'Garantia da instalação',   section: 'financeiro'    },
 ];
 
 const SECTIONS = {
@@ -394,6 +421,9 @@ class TarifaService {
 class CalculadoraController {
   static #CRESCIMENTO_DEFAULT = 0.06;
   static #TARIFA_KWH  = 0.982; /* atualizado assincronamente */
+  static #CONSUMO_MIN = 0;
+  static #CONSUMO_MAX = 77000;
+  static #CONTA_MAX   = 75000;
 
   #slider;
   #sliderAnos;
@@ -456,7 +486,7 @@ class CalculadoraController {
     this.#tarifaStatus    = document.getElementById('tarifa-status');
 
     this.#bind();
-    this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
+    this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, CalculadoraController.#CONSUMO_MIN, CalculadoraController.#CONSUMO_MAX);
     this.#syncSliderAnos();
     this.#syncSliderPct();
     this.#atualizarConta();
@@ -489,7 +519,7 @@ class CalculadoraController {
     this.#rafPending = true;
     requestAnimationFrame(() => {
       this.#rafPending = false;
-      this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, 50, 2000);
+      this.#syncSlider(this.#slider, this.#fillConsumo, this.#thumbConsumoWrap, CalculadoraController.#CONSUMO_MIN, CalculadoraController.#CONSUMO_MAX);
       this.#syncSliderAnos();
       this.#syncSliderPct();
       this.#atualizarConta();
@@ -508,12 +538,12 @@ class CalculadoraController {
     });
 
     this.#btnMenos.addEventListener('click', () => {
-      this.#slider.value = Math.max(50, +this.#slider.value - 10);
+      this.#slider.value = Math.max(CalculadoraController.#CONSUMO_MIN, +this.#slider.value - 10);
       this.#scheduleSync();
       this.#dispararRaios(this.#lightningConsumo);
     });
     this.#btnMais.addEventListener('click', () => {
-      this.#slider.value = Math.min(2000, +this.#slider.value + 10);
+      this.#slider.value = Math.min(CalculadoraController.#CONSUMO_MAX, +this.#slider.value + 10);
       this.#scheduleSync();
       this.#dispararRaios(this.#lightningConsumo);
     });
@@ -577,16 +607,19 @@ class CalculadoraController {
 
   #atualizarConta() {
     if (!this.#displayConta) return;
-    const consumo = +this.#slider.value;
-    const fatura  = consumo * CalculadoraController.#TARIFA_KWH;
+    const fatura = this.#calcularFaturaMensal();
     this.#displayConta.textContent = fatura.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   #atualizarPreviewFatura() {
     if (!this.#faturaPrev) return;
-    const consumo = +this.#slider.value;
-    const fatura  = consumo * CalculadoraController.#TARIFA_KWH;
+    const fatura = this.#calcularFaturaMensal();
     this.#faturaPrev.textContent = '≈ ' + CalculadoraController.#fmt(fatura) + ' / mês';
+  }
+
+  #calcularFaturaMensal() {
+    const consumo = +this.#slider.value;
+    return Math.min(consumo * CalculadoraController.#TARIFA_KWH, CalculadoraController.#CONTA_MAX);
   }
 
   #dispararRaios(container) {
@@ -616,7 +649,7 @@ class CalculadoraController {
     const tarifa  = CalculadoraController.#TARIFA_KWH;
     const taxa    = +this.#sliderPct.value / 100;
 
-    const faturaMensal = consumo * tarifa;
+    const faturaMensal = this.#calcularFaturaMensal();
     const faturaAnual  = faturaMensal * 12;
     let   acumulado    = 0;
     const anoAtual     = new Date().getFullYear();
@@ -1017,6 +1050,13 @@ class EfvSolarApp {
   #animacao            = null;
   #typewriter          = null;
   #sheetAberto         = false;
+  #form                = null;
+  #numericInputs       = [];
+  #requiredInputs      = [];
+  #countInputs         = [];
+  #cableInputs         = [];
+  #totalItensEl        = null;
+  #ultimoTotalItens    = null;
 
   constructor() {
     this.#btnGerar = document.getElementById('btn-gerar-pdf');
@@ -1067,6 +1107,19 @@ class EfvSolarApp {
 
   #vincularEventos() {
     this.#btnGerar.addEventListener('click', () => this.#salvarEGerarPDF());
+    this.#prepararFormulario();
+
+    this.#form?.addEventListener('beforeinput', e => this.#bloquearNumeroInvalido(e));
+    this.#form?.addEventListener('keydown', e => this.#bloquearTeclaNumericaInvalida(e));
+    this.#form?.addEventListener('paste', e => this.#bloquearColagemNumericaInvalida(e));
+    this.#form?.addEventListener('input', e => this.#aoInputFormulario(e));
+    this.#form?.addEventListener('focusout', e => this.#validarCampo(e.target));
+    this.#form?.addEventListener('reset', () => {
+      requestAnimationFrame(() => {
+        this.#limparErrosFormulario();
+        this.#atualizarTotalItens();
+      });
+    });
 
     /* Home: abrir sheet ao clicar em Novo Orçamento */
     document.getElementById('btn-novo-orcamento')
@@ -1081,6 +1134,136 @@ class EfvSolarApp {
       ?.addEventListener('click', () => this.#fecharSheet());
 
     /* btn-ver-animacao existe no HTML mas não reinicia mais a animação */
+  }
+
+  #prepararFormulario() {
+    this.#form = document.getElementById('orcamento-form');
+    if (!this.#form) return;
+
+    this.#numericInputs    = [...this.#form.querySelectorAll('input[type="number"]')];
+    this.#requiredInputs   = [...this.#form.querySelectorAll('[required]')];
+    this.#countInputs      = [...this.#form.querySelectorAll('[data-item-count]')];
+    this.#cableInputs      = [...this.#form.querySelectorAll('[data-item-cable]')];
+    this.#totalItensEl     = document.getElementById('quantidade_total_itens');
+
+    this.#numericInputs.forEach(input => {
+      input.inputMode = input.step && input.step !== '1' ? 'decimal' : 'numeric';
+    });
+    this.#form.querySelectorAll('.form-group').forEach(group => {
+      if (!group.querySelector('.field-error')) {
+        const erro = document.createElement('span');
+        erro.className = 'field-error';
+        erro.setAttribute('aria-live', 'polite');
+        group.appendChild(erro);
+      }
+    });
+
+    this.#atualizarTotalItens();
+  }
+
+  #bloquearNumeroInvalido(evento) {
+    const input = evento.target;
+    if (!(input instanceof HTMLInputElement) || input.type !== 'number') return;
+    if (['-', '+', 'e', 'E'].includes(evento.data)) evento.preventDefault();
+  }
+
+  #bloquearTeclaNumericaInvalida(evento) {
+    const input = evento.target;
+    if (!(input instanceof HTMLInputElement) || input.type !== 'number') return;
+    if (['-', '+', 'e', 'E'].includes(evento.key)) evento.preventDefault();
+  }
+
+  #bloquearColagemNumericaInvalida(evento) {
+    const input = evento.target;
+    if (!(input instanceof HTMLInputElement) || input.type !== 'number') return;
+    const texto = evento.clipboardData?.getData('text') ?? '';
+    if (/[eE+-]/.test(texto)) evento.preventDefault();
+  }
+
+  #aoInputFormulario(evento) {
+    const input = evento.target;
+    if (!(input instanceof HTMLInputElement || input instanceof HTMLSelectElement)) return;
+
+    if (input instanceof HTMLInputElement && input.type === 'number') {
+      this.#normalizarNumero(input);
+    }
+    if (input.matches('[data-item-count], [data-item-cable]')) {
+      this.#atualizarTotalItens();
+    }
+    if (input.required || input.getAttribute('aria-invalid') === 'true') {
+      this.#validarCampo(input);
+    }
+  }
+
+  #normalizarNumero(input) {
+    if (input.value === '') return;
+    const numero = Number.parseFloat(input.value);
+    if (!Number.isFinite(numero)) {
+      input.value = '';
+      return;
+    }
+    const min = Number.parseFloat(input.min || '0');
+    if (numero < min) input.value = String(min);
+  }
+
+  #atualizarTotalItens() {
+    if (!this.#totalItensEl) return;
+
+    const somarValor = el => {
+      const valor = Number.parseFloat(String(el.value).replace(',', '.'));
+      return Number.isFinite(valor) && valor > 0 ? valor : 0;
+    };
+
+    const quantidades = this.#countInputs
+      .reduce((total, el) => total + somarValor(el), 0);
+    const cabos = this.#cableInputs
+      .reduce((total, el) => total + (somarValor(el) > 0 ? 1 : 0), 0);
+    const total = quantidades + cabos;
+
+    if (total !== this.#ultimoTotalItens) {
+      this.#totalItensEl.value = String(total);
+      this.#ultimoTotalItens = total;
+    }
+  }
+
+  #validarFormulario() {
+    if (!this.#form) return true;
+    const campos = [...this.#requiredInputs, ...this.#numericInputs];
+    const invalido = campos.find(campo => !this.#validarCampo(campo));
+
+    if (invalido) {
+      invalido.focus({ preventScroll: true });
+      invalido.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return false;
+    }
+    return true;
+  }
+
+  #validarCampo(campo) {
+    if (!(campo instanceof HTMLInputElement || campo instanceof HTMLSelectElement)) return true;
+    const grupo = campo.closest('.form-group');
+    const erroEl = grupo?.querySelector('.field-error');
+    let mensagem = '';
+
+    if (campo.required && !campo.value.trim()) {
+      mensagem = 'Preencha este campo para continuar.';
+    } else if (campo instanceof HTMLInputElement && campo.type === 'number') {
+      const valor = campo.value === '' ? 0 : Number.parseFloat(campo.value);
+      if (!Number.isFinite(valor)) mensagem = 'Informe apenas números.';
+      if (Number.isFinite(valor) && valor < 0) mensagem = 'O valor não pode ser negativo.';
+    }
+
+    campo.setAttribute('aria-invalid', mensagem ? 'true' : 'false');
+    grupo?.classList.toggle('has-error', Boolean(mensagem));
+    if (erroEl) erroEl.textContent = mensagem;
+
+    return !mensagem;
+  }
+
+  #limparErrosFormulario() {
+    this.#form?.querySelectorAll('.has-error').forEach(el => el.classList.remove('has-error'));
+    this.#form?.querySelectorAll('[aria-invalid="true"]').forEach(el => el.setAttribute('aria-invalid', 'false'));
+    this.#form?.querySelectorAll('.field-error').forEach(el => { el.textContent = ''; });
   }
 
   /* Abre a sheet: canvas dimma, formulário sobe como bottom sheet */
@@ -1118,6 +1301,7 @@ class EfvSolarApp {
   }
 
   async #salvarEGerarPDF() {
+    if (!this.#validarFormulario()) return;
     this.#setCarregando(true);
     try {
       const dados     = this.#coletarDados();

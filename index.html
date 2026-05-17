@@ -119,15 +119,52 @@
           <div class="fields-wrapper">
             <div class="form-group full-width">
               <label for="nome" class="form-label">Nome do Cliente</label>
-              <input type="text" id="nome" name="nome" class="form-input" placeholder="Nome completo do cliente">
+              <input type="text" id="nome" name="nome" class="form-input" placeholder="Nome completo do cliente" required>
             </div>
             <div class="form-group full-width">
-              <label for="endereco" class="form-label">Endereço do Cliente</label>
-              <input type="text" id="endereco" name="endereco" class="form-input" placeholder="Endereço completo">
+              <label for="endereco" class="form-label">Endereço</label>
+              <input type="text" id="endereco" name="endereco" class="form-input" placeholder="Endereço completo" required>
             </div>
             <div class="form-group">
-              <label for="contato" class="form-label">Contato do Cliente</label>
-              <input type="tel" id="contato" name="contato" class="form-input" inputmode="numeric" pattern="[0-9]*" placeholder="Somente números">
+              <label for="contato" class="form-label">Contato</label>
+              <input type="tel" id="contato" name="contato" class="form-input" inputmode="numeric" pattern="[0-9]*" placeholder="Somente números" required>
+            </div>
+            <div class="form-group">
+              <label for="cidade" class="form-label">Cidade</label>
+              <input type="text" id="cidade" name="cidade" class="form-input" placeholder="Cidade" required>
+            </div>
+            <div class="form-group">
+              <label for="estado" class="form-label">Estado</label>
+              <select id="estado" name="estado" class="form-input" required>
+                <option value="">Selecione</option>
+                <option value="AC">AC</option>
+                <option value="AL">AL</option>
+                <option value="AP">AP</option>
+                <option value="AM">AM</option>
+                <option value="BA">BA</option>
+                <option value="CE">CE</option>
+                <option value="DF">DF</option>
+                <option value="ES">ES</option>
+                <option value="GO">GO</option>
+                <option value="MA">MA</option>
+                <option value="MT">MT</option>
+                <option value="MS">MS</option>
+                <option value="MG">MG</option>
+                <option value="PA">PA</option>
+                <option value="PB">PB</option>
+                <option value="PR">PR</option>
+                <option value="PE">PE</option>
+                <option value="PI">PI</option>
+                <option value="RJ">RJ</option>
+                <option value="RN">RN</option>
+                <option value="RS">RS</option>
+                <option value="RO">RO</option>
+                <option value="RR">RR</option>
+                <option value="SC">SC</option>
+                <option value="SP">SP</option>
+                <option value="SE">SE</option>
+                <option value="TO">TO</option>
+              </select>
             </div>
           </div>
         </fieldset>
@@ -135,26 +172,159 @@
         <!-- EQUIPAMENTOS -->
         <fieldset class="form-section">
           <legend>Equipamentos</legend>
-          <div class="fields-wrapper">
-            <div class="form-group full-width">
-              <label for="qtd_placas" class="form-label">Quantidade de Placas</label>
-              <input type="number" id="qtd_placas" name="qtd_placas" class="form-input" min="1" max="100" value="1" placeholder="Ex: 12">
+          <div class="fields-wrapper equipment-wrapper">
+            <div class="equipment-subsection">
+              <h3 class="equipment-subtitle">Placas Solares</h3>
+              <div class="equipment-grid">
+                <div class="form-group">
+                  <label for="placas_marca" class="form-label">Marca</label>
+                  <input type="text" id="placas_marca" name="placas_marca" class="form-input" placeholder="Marca da placa">
+                </div>
+                <div class="form-group">
+                  <label for="placas_potencia" class="form-label">Potência</label>
+                  <div class="input-with-unit">
+                    <input type="number" id="placas_potencia" name="placas_potencia" class="form-input" min="0" step="1" placeholder="0">
+                    <span>W</span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="placas_largura" class="form-label">Largura</label>
+                  <div class="input-with-unit">
+                    <input type="number" id="placas_largura" name="placas_largura" class="form-input" min="0" step="0.1" placeholder="0">
+                    <span>cm</span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="placas_comprimento" class="form-label">Comprimento</label>
+                  <div class="input-with-unit">
+                    <input type="number" id="placas_comprimento" name="placas_comprimento" class="form-input" min="0" step="0.1" placeholder="0">
+                    <span>cm</span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="placas_quantidade" class="form-label">Quantidade</label>
+                  <input type="number" id="placas_quantidade" name="placas_quantidade" class="form-input" min="0" step="1" placeholder="0" data-item-count>
+                </div>
+                <div class="form-group">
+                  <label for="placas_peso" class="form-label">Peso</label>
+                  <div class="input-with-unit">
+                    <input type="number" id="placas_peso" name="placas_peso" class="form-input" min="0" step="0.1" placeholder="0">
+                    <span>kg</span>
+                  </div>
+                </div>
+                <div class="form-group full-width">
+                  <label for="placas_fornecedor" class="form-label">Fornecedor</label>
+                  <input type="text" id="placas_fornecedor" name="placas_fornecedor" class="form-input" placeholder="Fornecedor">
+                </div>
+              </div>
             </div>
-            <div class="form-group full-width">
-              <label for="inversor" class="form-label">Inversor</label>
-              <input type="text" id="inversor" name="inversor" class="form-input" placeholder="Modelo e potência do inversor">
+
+            <div class="equipment-subsection">
+              <h3 class="equipment-subtitle">Inversores</h3>
+              <div class="equipment-grid">
+                <div class="form-group">
+                  <label for="inversores_marca" class="form-label">Marca</label>
+                  <input type="text" id="inversores_marca" name="inversores_marca" class="form-input" placeholder="Marca do inversor">
+                </div>
+                <div class="form-group">
+                  <label for="inversores_potencia" class="form-label">Potência</label>
+                  <input type="number" id="inversores_potencia" name="inversores_potencia" class="form-input" min="0" step="1" placeholder="0">
+                </div>
+                <div class="form-group">
+                  <label for="inversores_quantidade" class="form-label">Quantidade</label>
+                  <input type="number" id="inversores_quantidade" name="inversores_quantidade" class="form-input" min="0" step="1" placeholder="0" data-item-count>
+                </div>
+                <div class="form-group">
+                  <label for="inversores_peso" class="form-label">Peso</label>
+                  <input type="number" id="inversores_peso" name="inversores_peso" class="form-input" min="0" step="0.1" placeholder="0">
+                </div>
+                <div class="form-group full-width">
+                  <label for="inversores_fornecedor" class="form-label">Fornecedor</label>
+                  <input type="text" id="inversores_fornecedor" name="inversores_fornecedor" class="form-input" placeholder="Fornecedor">
+                </div>
+              </div>
             </div>
-            <div class="form-group full-width">
-              <label for="estrutura" class="form-label">Estrutura</label>
-              <input type="text" id="estrutura" name="estrutura" class="form-input" placeholder="Tipo de estrutura de fixação">
+
+            <div class="equipment-subsection">
+              <h3 class="equipment-subtitle">Microinversores</h3>
+              <div class="equipment-grid">
+                <div class="form-group">
+                  <label for="microinversores_marca" class="form-label">Marca</label>
+                  <input type="text" id="microinversores_marca" name="microinversores_marca" class="form-input" placeholder="Marca do microinversor">
+                </div>
+                <div class="form-group">
+                  <label for="microinversores_potencia" class="form-label">Potência</label>
+                  <input type="number" id="microinversores_potencia" name="microinversores_potencia" class="form-input" min="0" step="1" placeholder="0">
+                </div>
+                <div class="form-group">
+                  <label for="microinversores_quantidade" class="form-label">Quantidade</label>
+                  <input type="number" id="microinversores_quantidade" name="microinversores_quantidade" class="form-input" min="0" step="1" placeholder="0" data-item-count>
+                </div>
+                <div class="form-group">
+                  <label for="microinversores_peso" class="form-label">Peso</label>
+                  <input type="number" id="microinversores_peso" name="microinversores_peso" class="form-input" min="0" step="0.1" placeholder="0">
+                </div>
+                <div class="form-group full-width">
+                  <label for="microinversores_fornecedor" class="form-label">Fornecedor</label>
+                  <input type="text" id="microinversores_fornecedor" name="microinversores_fornecedor" class="form-input" placeholder="Fornecedor">
+                </div>
+              </div>
             </div>
-            <div class="form-group">
-              <label for="cabo_preto" class="form-label">Cabo CC Preto</label>
-              <input type="text" id="cabo_preto" name="cabo_preto" class="form-input" placeholder="Ex: 50 metros">
+
+            <div class="equipment-subsection">
+              <h3 class="equipment-subtitle">Estrutura</h3>
+              <div class="equipment-grid">
+                <div class="form-group">
+                  <label for="estrutura_modelo" class="form-label">Modelo da estrutura</label>
+                  <select id="estrutura_modelo" name="estrutura_modelo" class="form-input">
+                    <option value="">Selecione</option>
+                    <option value="Metálica">Metálica</option>
+                    <option value="Madeira">Madeira</option>
+                    <option value="Bloco">Bloco</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="estrutura_quantidade" class="form-label">Quantidade</label>
+                  <input type="number" id="estrutura_quantidade" name="estrutura_quantidade" class="form-input" min="0" step="1" placeholder="0" data-item-count>
+                </div>
+                <div class="form-group">
+                  <label for="estrutura_peso" class="form-label">Peso</label>
+                  <input type="number" id="estrutura_peso" name="estrutura_peso" class="form-input" min="0" step="0.1" placeholder="0">
+                </div>
+                <div class="form-group">
+                  <label for="estrutura_largura" class="form-label">Largura</label>
+                  <input type="number" id="estrutura_largura" name="estrutura_largura" class="form-input" min="0" step="0.1" placeholder="0">
+                </div>
+                <div class="form-group">
+                  <label for="estrutura_comprimento" class="form-label">Comprimento</label>
+                  <input type="number" id="estrutura_comprimento" name="estrutura_comprimento" class="form-input" min="0" step="0.1" placeholder="0">
+                </div>
+              </div>
             </div>
-            <div class="form-group">
-              <label for="cabo_vermelho" class="form-label">Cabo CC Vermelho</label>
-              <input type="text" id="cabo_vermelho" name="cabo_vermelho" class="form-input" placeholder="Ex: 50 metros">
+
+            <div class="equipment-subsection">
+              <h3 class="equipment-subtitle">Cabos</h3>
+              <div class="equipment-grid">
+                <div class="form-group">
+                  <label for="cabo_preto_metros" class="form-label">Cabo Preto</label>
+                  <div class="input-with-unit">
+                    <input type="number" id="cabo_preto_metros" name="cabo_preto_metros" class="form-input" min="0" step="0.1" placeholder="0" data-item-cable>
+                    <span>m</span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="cabo_vermelho_metros" class="form-label">Cabo Vermelho</label>
+                  <div class="input-with-unit">
+                    <input type="number" id="cabo_vermelho_metros" name="cabo_vermelho_metros" class="form-input" min="0" step="0.1" placeholder="0" data-item-cable>
+                    <span>m</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="equipment-total">
+              <label for="quantidade_total_itens" class="form-label">Quantidade Total de Itens</label>
+              <input type="number" id="quantidade_total_itens" name="quantidade_total_itens" class="form-input" value="0" readonly>
             </div>
           </div>
         </fieldset>
@@ -162,38 +332,79 @@
         <!-- ANÁLISE FINANCEIRA -->
         <fieldset class="form-section">
           <legend>Análise Financeira</legend>
-          <div class="fields-wrapper">
-            <div class="form-group">
-              <label for="inflacao" class="form-label">Inflação Anual</label>
-              <input type="text" id="inflacao" name="inflacao" class="form-input" placeholder="Ex: 5%">
+          <div class="fields-wrapper finance-wrapper">
+            <div class="equipment-subsection">
+              <h3 class="equipment-subtitle">Unidade Consumidora</h3>
+              <div class="finance-grid">
+                <div class="form-group">
+                  <label for="tipo_unidade_consumidora" class="form-label">Tipo de Unidade Consumidora</label>
+                  <select id="tipo_unidade_consumidora" name="tipo_unidade_consumidora" class="form-input">
+                    <option value="">Selecione</option>
+                    <option value="Residencial">Residencial</option>
+                    <option value="Comercial">Comercial</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="quantidade_unidades" class="form-label">Quantidade de Unidades</label>
+                  <input type="number" id="quantidade_unidades" name="quantidade_unidades" class="form-input" min="0" step="1" placeholder="0">
+                </div>
+              </div>
             </div>
-            <div class="form-group">
-              <label for="economia" class="form-label">Economia</label>
-              <input type="text" id="economia" name="economia" class="form-input" placeholder="Economia estimada">
+
+            <div class="equipment-subsection">
+              <h3 class="equipment-subtitle">Indicadores Financeiros</h3>
+              <div class="finance-grid">
+                <div class="form-group">
+                  <label for="inflacao" class="form-label">Inflação Anual</label>
+                  <input type="text" id="inflacao" name="inflacao" class="form-input" placeholder="Ex: 5%">
+                </div>
+                <div class="form-group">
+                  <label for="economia" class="form-label">Economia</label>
+                  <input type="text" id="economia" name="economia" class="form-input" placeholder="Economia estimada">
+                </div>
+                <div class="form-group">
+                  <label for="economia_mensal" class="form-label">Economia Mensal</label>
+                  <input type="text" id="economia_mensal" name="economia_mensal" class="form-input" placeholder="Ex: R$ 500,00">
+                </div>
+                <div class="form-group">
+                  <label for="economia_anual" class="form-label">Economia Anual</label>
+                  <input type="text" id="economia_anual" name="economia_anual" class="form-input" placeholder="Ex: R$ 6.000,00">
+                </div>
+                <div class="form-group">
+                  <label for="valor_orcamento" class="form-label">Valor do Orçamento</label>
+                  <input type="text" id="valor_orcamento" name="valor_orcamento" class="form-input" inputmode="numeric" placeholder="Ex: R$ 30.000,00">
+                </div>
+                <div class="form-group">
+                  <label for="investimento" class="form-label">Investimento</label>
+                  <input type="text" id="investimento" name="investimento" class="form-input" placeholder="Ex: R$ 25.000,00">
+                </div>
+                <div class="form-group">
+                  <label for="economia_30" class="form-label">Economia no Período</label>
+                  <input type="text" id="economia_30" name="economia_30" class="form-input" placeholder="Ex: R$ 180.000,00">
+                </div>
+                <div class="form-group">
+                  <label for="periodo_anos" class="form-label">Período de Economia</label>
+                  <input type="text" id="periodo_anos" name="periodo_anos" class="form-input" placeholder="Ex: 20 anos">
+                </div>
+              </div>
             </div>
-            <div class="form-group">
-              <label for="economia_mensal" class="form-label">Economia Mensal</label>
-              <input type="text" id="economia_mensal" name="economia_mensal" class="form-input" placeholder="Ex: R$ 500,00">
-            </div>
-            <div class="form-group">
-              <label for="economia_anual" class="form-label">Economia Anual</label>
-              <input type="text" id="economia_anual" name="economia_anual" class="form-input" placeholder="Ex: R$ 6.000,00">
-            </div>
-            <div class="form-group">
-              <label for="valor_orcamento" class="form-label">Valor do Orçamento</label>
-              <input type="text" id="valor_orcamento" name="valor_orcamento" class="form-input" inputmode="numeric" placeholder="Ex: R$ 30.000,00">
-            </div>
-            <div class="form-group">
-              <label for="investimento" class="form-label">Investimento</label>
-              <input type="text" id="investimento" name="investimento" class="form-input" placeholder="Ex: R$ 25.000,00">
-            </div>
-            <div class="form-group">
-              <label for="economia_30" class="form-label">Economia no Período</label>
-              <input type="text" id="economia_30" name="economia_30" class="form-input" placeholder="Ex: R$ 180.000,00">
-            </div>
-            <div class="form-group">
-              <label for="periodo_anos" class="form-label">Período de Economia</label>
-              <input type="text" id="periodo_anos" name="periodo_anos" class="form-input" placeholder="Ex: 20 anos">
+
+            <div class="equipment-subsection">
+              <h3 class="equipment-subtitle">Garantia</h3>
+              <div class="finance-grid">
+                <div class="form-group">
+                  <label for="garantia_placas" class="form-label">Garantia das placas</label>
+                  <input type="text" id="garantia_placas" name="garantia_placas" class="form-input" placeholder="Ex: 25 anos">
+                </div>
+                <div class="form-group">
+                  <label for="garantia_inversores" class="form-label">Garantia dos inversores</label>
+                  <input type="text" id="garantia_inversores" name="garantia_inversores" class="form-input" placeholder="Ex: 10 anos">
+                </div>
+                <div class="form-group">
+                  <label for="garantia_instalacao" class="form-label">Garantia da instalação</label>
+                  <input type="text" id="garantia_instalacao" name="garantia_instalacao" class="form-input" placeholder="Ex: 1 ano">
+                </div>
+              </div>
             </div>
           </div>
         </fieldset>
@@ -304,7 +515,7 @@
                     </div>
                   </div>
                 </div>
-                <input type="range" id="slider-consumo" class="slider-hidden" min="50" max="2000" step="10" value="300" aria-label="Consumo mensal em kWh">
+                <input type="range" id="slider-consumo" class="slider-hidden" min="0" max="77000" step="10" value="300" aria-label="Consumo mensal em kWh">
               </div>
               <button id="btn-mais" class="knob-btn knob-btn--plus" type="button" aria-label="Aumentar consumo">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -320,7 +531,7 @@
         <!-- BLOCO CONTA -->
         <div class="calc-block">
           <div class="calc-section-label">
-            <span class="calc-section-dot calc-dot--gold"></span>Valor da Conta Mensal
+            <span class="calc-section-dot calc-dot--gold"></span>Valor Mensal da Conta
           </div>
           <div class="calc-conta-display-wrap">
             <span class="calc-conta-currency">R$</span>
