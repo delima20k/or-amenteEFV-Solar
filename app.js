@@ -27,8 +27,8 @@ const FIELDS = [
   { id: 'estrutura_modelo',              label: 'Estrutura - Modelo',                section: 'equipamentos'  },
   { id: 'estrutura_quantidade',          label: 'Estrutura - Quantidade',            section: 'equipamentos'  },
   { id: 'estrutura_peso',                label: 'Estrutura - Peso',                  section: 'equipamentos'  },
-  { id: 'estrutura_largura',             label: 'Estrutura - Largura',               section: 'equipamentos'  },
-  { id: 'estrutura_comprimento',         label: 'Estrutura - Comprimento',           section: 'equipamentos'  },
+  { id: 'estrutura_largura',             label: 'Estrutura - Largura (cm)',          section: 'equipamentos'  },
+  { id: 'estrutura_comprimento',         label: 'Estrutura - Comprimento (cm)',      section: 'equipamentos'  },
   { id: 'cabo_preto_metros',             label: 'Cabos - Cabo Preto (m)',            section: 'equipamentos'  },
   { id: 'cabo_vermelho_metros',          label: 'Cabos - Cabo Vermelho (m)',         section: 'equipamentos'  },
   { id: 'quantidade_total_itens',        label: 'Quantidade Total de Itens',         section: 'equipamentos'  },
@@ -49,9 +49,152 @@ const FIELDS = [
 
 const SECTIONS = {
   cliente:      'Dados do Cliente',
+  detalhado:    'Orçamento Detalhado',
   equipamentos: 'Equipamentos',
   financeiro:   'Análise Financeira',
 };
+
+class OrcamentoResumoService {
+  static preparar(dados, calculo = null) {
+    const porId = new Map(dados.map(item => [item.id, item.value]));
+    const resumo = OrcamentoResumoService.#calcularResumo(porId);
+
+    return [
+      ...OrcamentoResumoService.#dadosCliente(porId),
+      ...OrcamentoResumoService.#orcamentoDetalhado(porId, resumo),
+      ...OrcamentoResumoService.#analiseFinanceira(porId, calculo),
+    ].filter(item => item.value);
+  }
+
+  static #dadosCliente(porId) {
+    return [
+      OrcamentoResumoService.#campo('cliente', 'Nome do Cliente', porId.get('nome')),
+      OrcamentoResumoService.#campo('cliente', 'Endereço', porId.get('endereco')),
+      OrcamentoResumoService.#campo('cliente', 'Contato', porId.get('contato')),
+      OrcamentoResumoService.#campo('cliente', 'Cidade', porId.get('cidade')),
+      OrcamentoResumoService.#campo('cliente', 'Estado', porId.get('estado')),
+    ];
+  }
+
+  static #orcamentoDetalhado(porId, resumo) {
+    return [
+      OrcamentoResumoService.#campo('detalhado', 'Placas Solares', OrcamentoResumoService.#descricaoEquipamento(porId, 'placas')),
+      OrcamentoResumoService.#campo('detalhado', 'Inversores', OrcamentoResumoService.#descricaoEquipamento(porId, 'inversores')),
+      OrcamentoResumoService.#campo('detalhado', 'Microinversores', OrcamentoResumoService.#descricaoEquipamento(porId, 'microinversores')),
+      OrcamentoResumoService.#campo('detalhado', 'Estrutura', OrcamentoResumoService.#descricaoEstrutura(porId)),
+      OrcamentoResumoService.#campo('detalhado', 'Cabos', OrcamentoResumoService.#descricaoCabos(porId)),
+      OrcamentoResumoService.#campo('detalhado', 'Quantidade Total de Itens', porId.get('quantidade_total_itens')),
+      OrcamentoResumoService.#campo('detalhado', 'Peso Total', OrcamentoResumoService.#formatarNumero(resumo.pesoTotal, 'kg')),
+      OrcamentoResumoService.#campo('detalhado', 'Largura Total', OrcamentoResumoService.#formatarNumero(resumo.larguraTotal, 'cm')),
+      OrcamentoResumoService.#campo('detalhado', 'Altura Total', OrcamentoResumoService.#formatarNumero(resumo.alturaTotal, 'cm')),
+    ];
+  }
+
+  static #analiseFinanceira(porId, calculo) {
+    const temConsumoCalculado = Number.isFinite(calculo?.consumo);
+    const temFaturaCalculada = Number.isFinite(calculo?.faturaMensal);
+
+    return [
+      OrcamentoResumoService.#campo('financeiro', 'Tipo de Unidade Consumidora', porId.get('tipo_unidade_consumidora')),
+      OrcamentoResumoService.#campo('financeiro', 'Quantidade de Unidades', porId.get('quantidade_unidades')),
+      OrcamentoResumoService.#campo('financeiro', 'Consumo Mensal', temConsumoCalculado ? `${calculo.consumo} kWh/mês` : OrcamentoResumoService.#extrairConsumo(porId.get('economia'))),
+      OrcamentoResumoService.#campo('financeiro', 'Valor Mensal da Conta', temFaturaCalculada ? CalculadoraController.formatarMoeda(calculo.faturaMensal) : porId.get('economia_mensal')),
+      OrcamentoResumoService.#campo('financeiro', 'Economia Anual', porId.get('economia_anual')),
+      OrcamentoResumoService.#campo('financeiro', 'Investimento', porId.get('investimento')),
+      OrcamentoResumoService.#campo('financeiro', 'Valor do Orçamento', porId.get('valor_orcamento')),
+      OrcamentoResumoService.#campo('financeiro', 'Economia no Período', porId.get('economia_30')),
+      OrcamentoResumoService.#campo('financeiro', 'Período de Economia', porId.get('periodo_anos')),
+      OrcamentoResumoService.#campo('financeiro', 'Inflação Anual', porId.get('inflacao')),
+      OrcamentoResumoService.#campo('financeiro', 'Garantia das placas', porId.get('garantia_placas')),
+      OrcamentoResumoService.#campo('financeiro', 'Garantia dos inversores', porId.get('garantia_inversores')),
+      OrcamentoResumoService.#campo('financeiro', 'Garantia da instalação', porId.get('garantia_instalacao')),
+    ];
+  }
+
+  static #calcularResumo(porId) {
+    const item = prefixo => ({
+      quantidade: OrcamentoResumoService.#numero(porId.get(`${prefixo}_quantidade`)),
+      peso:       OrcamentoResumoService.#numero(porId.get(`${prefixo}_peso`)),
+      largura:    OrcamentoResumoService.#numero(porId.get(`${prefixo}_largura`)),
+      altura:     OrcamentoResumoService.#numero(porId.get(`${prefixo}_comprimento`)),
+    });
+
+    const placas = item('placas');
+    const inversores = item('inversores');
+    const microinversores = item('microinversores');
+    const estrutura = item('estrutura');
+
+    return {
+      pesoTotal:
+        placas.quantidade * placas.peso +
+        inversores.quantidade * inversores.peso +
+        microinversores.quantidade * microinversores.peso +
+        estrutura.quantidade * estrutura.peso,
+      larguraTotal:
+        placas.quantidade * placas.largura +
+        estrutura.quantidade * estrutura.largura,
+      alturaTotal:
+        placas.quantidade * placas.altura +
+        estrutura.quantidade * estrutura.altura,
+    };
+  }
+
+  static #numero(valor) {
+    const numero = Number.parseFloat(String(valor ?? '').replace(',', '.'));
+    return Number.isFinite(numero) && numero > 0 ? numero : 0;
+  }
+
+  static #formatarNumero(valor, unidade) {
+    const numero = Number.isFinite(valor) ? valor : 0;
+    return `${numero.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${unidade}`;
+  }
+
+  static #campo(section, label, value) {
+    return {
+      label,
+      section,
+      value: String(value ?? '').trim(),
+    };
+  }
+
+  static #descricaoEquipamento(porId, prefixo) {
+    return [
+      OrcamentoResumoService.#parte('Marca', porId.get(`${prefixo}_marca`)),
+      OrcamentoResumoService.#parte('Potência', porId.get(`${prefixo}_potencia`)),
+      OrcamentoResumoService.#parte('Quantidade', porId.get(`${prefixo}_quantidade`)),
+      OrcamentoResumoService.#parte('Fornecedor', porId.get(`${prefixo}_fornecedor`)),
+    ].filter(Boolean).join(' | ');
+  }
+
+  static #descricaoEstrutura(porId) {
+    return [
+      OrcamentoResumoService.#parte('Modelo', porId.get('estrutura_modelo')),
+      OrcamentoResumoService.#parte('Quantidade', porId.get('estrutura_quantidade')),
+    ].filter(Boolean).join(' | ');
+  }
+
+  static #descricaoCabos(porId) {
+    return [
+      OrcamentoResumoService.#parte('Cabo Preto', OrcamentoResumoService.#formatarCampoNumerico(porId.get('cabo_preto_metros'), 'm')),
+      OrcamentoResumoService.#parte('Cabo Vermelho', OrcamentoResumoService.#formatarCampoNumerico(porId.get('cabo_vermelho_metros'), 'm')),
+    ].filter(Boolean).join(' | ');
+  }
+
+  static #parte(label, value) {
+    const texto = String(value ?? '').trim();
+    return texto ? `${label}: ${texto}` : '';
+  }
+
+  static #formatarCampoNumerico(value, unidade) {
+    const numero = OrcamentoResumoService.#numero(value);
+    return numero > 0 ? OrcamentoResumoService.#formatarNumero(numero, unidade) : '';
+  }
+
+  static #extrairConsumo(value) {
+    const match = String(value ?? '').match(/[\d.,]+\s*kWh(?:\/m(?:ê|e|Ãª)s)?/i);
+    return match?.[0] ?? '';
+  }
+}
 
 /* ===================================================
    STORAGE — persistência local dos orçamentos
@@ -747,6 +890,10 @@ class CalculadoraController {
 
   getUltimoCalc() { return this.#ultimoCalc; }
 
+  static formatarMoeda(v) {
+    return CalculadoraController.#fmt(v);
+  }
+
   static #fmt(v) {
     return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
@@ -1287,6 +1434,7 @@ class EfvSolarApp {
 
   #coletarDados() {
     return FIELDS.map(({ id, label, section }) => ({
+      id,
       label,
       section,
       value: document.getElementById(id)?.value?.trim() ?? '',
@@ -1304,9 +1452,10 @@ class EfvSolarApp {
     if (!this.#validarFormulario()) return;
     this.#setCarregando(true);
     try {
-      const dados     = this.#coletarDados();
+      const dados     = OrcamentoResumoService.preparar(this.#coletarDados(), this.#calculadoraCtrl?.getUltimoCalc());
       const nomeField = dados.find(d => d.label === 'Nome do Cliente');
       const nome      = nomeField?.value || '';
+      const valorMensal = dados.find(d => d.label === 'Valor Mensal da Conta')?.value ?? '';
 
       const registro = {
         id:             Date.now().toString(36) + Math.random().toString(36).slice(2),
@@ -1314,7 +1463,7 @@ class EfvSolarApp {
         data:           new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
         dados,
         ok:             false,
-        economia_mensal: dados.find(d => d.label === 'Economia Mensal')?.value ?? '',
+        economia_mensal: valorMensal,
         economia_anual:  dados.find(d => d.label === 'Economia Anual')?.value  ?? '',
         investimento:    dados.find(d => d.label === 'Investimento')?.value    ?? '',
       };
